@@ -174,7 +174,7 @@ fun ChannelCard(
                     )
                 }
 
-                if (channel.isPlayable) {
+                if (channel.canPlay) {
                     Text(
                         text = "▶",
                         color = Color.White,

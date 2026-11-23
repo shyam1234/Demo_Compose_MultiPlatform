@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -31,6 +32,7 @@ kotlin {
             implementation(projects.core.ui)
             implementation(projects.core.navigation)
             implementation(projects.core.di)
+            implementation(projects.core.data)
             implementation(projects.features.homeImpl)
             implementation(projects.features.searchImpl)
             implementation(projects.features.detailsImpl)
@@ -43,6 +45,8 @@ kotlin {
             implementation(libs.compose.components.resources)
             implementation(libs.jetbrains.navigation.compose)
             implementation(libs.jetbrains.lifecycle.runtime.compose)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.coroutines.core)
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)

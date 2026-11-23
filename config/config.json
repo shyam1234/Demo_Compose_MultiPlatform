@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "defaultCustomerId": "teplay",
+  "customers": [
+    {
+      "id": "teplay",
+      "displayName": "TE Play",
+      "enabled": true,
+      "packageName": "com.cmsdemo.teplay",
+      "branding": {
+        "brandName": "OTT",
+        "appLogo": {
+          "type": "image",
+          "source": "compose:splash_ott"
+        },
+        "splash": {
+          "type": "image",
+          "source": "compose:splash_ott",
+          "posterSource": "compose:splash_ott",
+          "durationMs": 3000,
+          "backgroundColor": "#000000",
+          "title": "OTT Platform",
+          "subtitle": "Streaming demo"
+        },
+        "theme": {
+          "dark": true,
+          "background": "#000000",
+          "surface": "#121212",
+          "accent": "#4285F4",
+          "accentSoft": "#8AB4F8",
+          "onSurface": "#FFFFFF",
+          "focus": "#4285F4"
+        }
+      },
+      "cms": {
+        "baseUrl": "https://cms.play-cms.com",
+        "menuDeviceType": null,
+        "deviceTypeOptOut": true,
+        "deviceTypeOverride": null,
+        "fallbackLayoutId": "6af4302c6368a4cce6863ca6"
+      },
+      "features": {
+        "search": true,
+        "watchlist": true,
+        "player": true,
+        "heroBanner": true,
+        "discoveryDock": true,
+        "thematicRails": true
+      },
+      "debug": {
+        "enabled": false,
+        "verboseLogging": false,
+        "ignoreDeviceTypeFilter": true
+      }
+    },
+    {
+      "id": "acme",
+      "displayName": "Acme Stream",
+      "enabled": true,
+      "packageName": "com.cmsdemo.acme",
+      "branding": {
+        "brandName": "Acme",
+        "appLogo": {
+          "type": "image",
+          "source": "https://cms.play-cms.com/v1/imageresize/w_512/h_512/original/%2Fmount%2Fimages%2Fteplay%2FTheme%2Fcommons%2Fthemes%2Fen%2FhcvLzukDE4Nb0Rc1726632183.png"
+        },
+        "splash": {
+          "type": "gif",
+          "source": "https://cms.play-cms.com/v1/imageresize/w_720/h_405/original/%2Fmount%2Fimages%2Fteplay%2FTheme%2Fcommons%2Fthemes%2Fen%2FhcvLzukDE4Nb0Rc1726632183.png",
+          "posterSource": "compose:splash_ott",
+          "durationMs": 3500,
+          "backgroundColor": "#0B0B0F",
+          "title": "Acme Stream",
+          "subtitle": "Customer demo branding"
+        },
+        "theme": {
+          "dark": true,
+          "background": "#0B0B0F",
+          "surface": "#16161D",
+          "accent": "#FF6A00",
+          "accentSoft": "#FFB080",
+          "onSurface": "#FFFFFF",
+          "focus": "#FF6A00"
+        }
+      },
+      "cms": {
+        "baseUrl": "https://cms.play-cms.com",
+        "menuDeviceType": "web",
+        "deviceTypeOptOut": false,
+        "deviceTypeOverride": "web",
+        "fallbackLayoutId": "6af4302c6368a4cce6863ca6"
+      },
+      "features": {
+        "search": false,
+        "watchlist": false,
+        "player": true,
+        "heroBanner": true,
+        "discoveryDock": true,
+        "thematicRails": true
+      },
+      "debug": {
+        "enabled": true,
+        "verboseLogging": true,
+        "ignoreDeviceTypeFilter": false
+      }
+    },
+    {
+      "id": "demo_video_splash",
+      "displayName": "Demo Video Splash",
+      "enabled": false,
+      "packageName": "com.cmsdemo.videodemo",
+      "branding": {
+        "brandName": "VideoDemo",
+        "appLogo": {
+          "type": "image",
+          "source": "compose:splash_ott"
+        },
+        "splash": {
+          "type": "video",
+          "source": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+          "posterSource": "compose:splash_ott",
+          "durationMs": 5000,
+          "backgroundColor": "#000000",
+          "title": "VideoDemo",
+          "subtitle": "MP4 / HLS splash example"
+        },
+        "theme": {
+          "dark": true,
+          "background": "#000000",
+          "surface": "#121212",
+          "accent": "#4285F4",
+          "accentSoft": "#8AB4F8",
+          "onSurface": "#FFFFFF",
+          "focus": "#4285F4"
+        }
+      },
+      "cms": {
+        "baseUrl": "https://cms.play-cms.com",
+        "menuDeviceType": null,
+        "deviceTypeOptOut": true,
+        "deviceTypeOverride": null,
+        "fallbackLayoutId": "6af4302c6368a4cce6863ca6"
+      },
+      "features": {
+        "search": true,
+        "watchlist": true,
+        "player": true,
+        "heroBanner": true,
+        "discoveryDock": true,
+        "thematicRails": true
+      },
+      "debug": {
+        "enabled": true,
+        "verboseLogging": false,
+        "ignoreDeviceTypeFilter": true
+      }
+    }
+  ]
+}

@@ -15,6 +15,7 @@ object ImageTypes {
     const val SQUARE = "Square"
     const val POSTER = "Poster"
     const val THUMBNAIL = "Thumbnail"
+    const val RAIL_BACKGROUND_IMAGE = "Rail_Background_Image"
 }
 
 /**

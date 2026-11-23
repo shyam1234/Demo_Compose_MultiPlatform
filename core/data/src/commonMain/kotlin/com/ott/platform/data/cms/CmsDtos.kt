@@ -30,7 +30,7 @@ data class CmsMenuGroupDto(
     @SerialName("publish_now") val publishNow: Int = 1,
     val menuGroupDeeplinkUrl: String = "",
     val menuGroupTitle: String = "",
-    val devicetype: List<String> = emptyList(),
+    @SerialName("devicetype") val deviceType: List<String> = emptyList(),
     val menuL1: List<CmsMenuL1Dto> = emptyList(),
 )
 
@@ -69,6 +69,7 @@ data class CmsLayoutResponseDto(
     @SerialName("layout_type") val layoutType: String = "",
     @SerialName("selected_icon") val selectedIcon: String = "",
     @SerialName("default_icon") val defaultIcon: String = "",
+    @SerialName("devicetype") val deviceType: List<String> = emptyList(),
 )
 
 @Serializable
@@ -96,6 +97,14 @@ data class CmsRailDto(
     @SerialName("publish_now") val publishNow: Int = 1,
     @SerialName("existing_asset") val existingAsset: CmsExistingAssetPageDto? = null,
     @SerialName("rail_images") val railImages: List<CmsAssetImageDto> = emptyList(),
+    /** When true, render the thematic rail chrome using [railImages] background artwork. */
+    @SerialName("rail_background_image") val railBackgroundImage: Boolean = false,
+    /** Ordered linked sub-rail IDs for `rail_content_type = discovery_dock`. */
+    @SerialName("discovery_dock_rail_ids") val discoveryDockRailIds: List<String> = emptyList(),
+    /** Nested rail payloads for discovery-dock tabs (may omit assets; fetch by id if empty). */
+    @SerialName("discovery_dock_rail_response") val discoveryDockRailResponse: List<CmsRailDto> = emptyList(),
+    @SerialName("is_support_playback") val isSupportPlayback: Boolean = false,
+    @SerialName("devicetype") val deviceType: List<String> = emptyList(),
 )
 
 @Serializable
@@ -149,7 +158,7 @@ data class CmsAssetDto(
 data class CmsAssetImageDto(
     @SerialName("lang_code") val langCode: String = "",
     @SerialName("group_key") val groupKey: String = "",
-    val devicetype: List<String> = emptyList(),
+    @SerialName("devicetype") val deviceType: List<String> = emptyList(),
     @SerialName("image_ratio") val imageRatio: String = "",
     val imagetype: String = "",
     val imageurl: String = "",

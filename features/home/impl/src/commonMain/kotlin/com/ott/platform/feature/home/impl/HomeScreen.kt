@@ -195,6 +195,7 @@ fun HomeScreen(
                         ContentShelfRow(
                             shelf = shelf,
                             onChannelClick = onOpenDetails,
+                            onPlay = onPlay,
                             isTv = isTv,
                         )
                     }

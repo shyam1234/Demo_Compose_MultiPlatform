@@ -49,17 +49,24 @@ import com.ott.platform.feature.player.impl.PlayerRoute
 import com.ott.platform.feature.search.impl.SearchRoute
 import com.ott.platform.feature.watchlist.impl.WatchlistRoute
 import com.ott.platform.navigation.OttRoutes
+import com.ott.platform.shared.branding.ActiveCustomerConfig
+import com.ott.platform.shared.branding.LocalActiveCustomer
+import com.ott.platform.shared.branding.ProvideCustomerBrand
 import com.ott.platform.ui.components.OttBottomMenu
 import com.ott.platform.ui.components.OttMenuItem
 import com.ott.platform.ui.components.OttPhoneTopBar
 import com.ott.platform.ui.components.OttTopMenu
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun OttApp(
     isTv: Boolean = false,
 ) {
-    OttTheme(darkTheme = true) {
+    val customer = koinInject<ActiveCustomerConfig>()
+    ProvideCustomerBrand(customer) {
+    OttTheme(darkTheme = customer.theme.dark) {
+        val brandName = LocalActiveCustomer.current.brandName
         val menuViewModel: AppMenuViewModel = koinViewModel()
         val menuState by menuViewModel.state.collectAsState()
 
@@ -72,17 +79,13 @@ fun OttApp(
             null
         }
 
+        // Navigation is 100% CMS-driven — no hardcoded Search / Library tabs.
         val cmsNavItems = remember(menuState.items) {
             buildCmsNavItems(menuState.items)
         }
-        val tvTopTabs = remember(cmsNavItems) {
-            cmsNavItems + OttMenuItem(OttRoutes.WATCHLIST, "Library")
-        }
-        val phoneBottomTabs = remember(cmsNavItems) {
-            cmsNavItems +
-                OttMenuItem(OttRoutes.SEARCH, "Search") +
-                OttMenuItem(OttRoutes.WATCHLIST, "Library")
-        }
+        val tvTopTabs = cmsNavItems
+        val phoneBottomTabs = cmsNavItems
+        val searchMenuItem = cmsNavItems.firstOrNull { it.id == OttRoutes.SEARCH }
 
         val selectedTabId = when (currentRoute) {
             OttRoutes.LAYOUT -> activeLayoutId?.let(OttRoutes::layout) ?: OttRoutes.HOME
@@ -102,8 +105,9 @@ fun OttApp(
             OttRoutes.SEARCH,
             OttRoutes.WATCHLIST,
         )
-        val showTvTopMenu = isTv && onMainTab
+        val showTvTopMenu = isTv && onMainTab && tvTopTabs.isNotEmpty()
         val showPhoneChrome = !isTv && onMainTab
+        val showPhoneBottomMenu = showPhoneChrome && phoneBottomTabs.isNotEmpty()
         val isPlayer = currentRoute == OttRoutes.PLAYER
 
         val focusManager = LocalFocusManager.current
@@ -182,10 +186,11 @@ fun OttApp(
                     showTvTopMenu -> OttTopMenu(
                         items = tvTopTabs,
                         selectedId = selectedTabId,
+                        brand = brandName,
                         isTv = true,
                         onItemSelected = ::navigateToTab,
-                        onSearchClick = {
-                            navigateToTab(OttMenuItem(OttRoutes.SEARCH, "Search"))
+                        onSearchClick = searchMenuItem?.let { item ->
+                            { navigateToTab(item) }
                         },
                     )
                     showPhoneChrome -> OttPhoneTopBar(
@@ -194,7 +199,7 @@ fun OttApp(
                 }
             },
             bottomBar = {
-                if (showPhoneChrome) {
+                if (showPhoneBottomMenu) {
                     OttBottomMenu(
                         items = phoneBottomTabs,
                         selectedId = selectedTabId,
@@ -285,19 +290,21 @@ fun OttApp(
         }
         }
     }
+    }
 }
 
+/**
+ * Maps CMS menu L1 items to app routes.
+ * Utility destinations (Search / Library) appear only when CMS defines them.
+ * Layout tabs require a CMS layout deeplink — nothing is invented client-side.
+ */
 private fun buildCmsNavItems(items: List<AppMenuItem>): List<OttMenuItem> {
-    if (items.isEmpty()) {
-        return listOf(OttMenuItem(OttRoutes.HOME, "Home"))
-    }
-    return items.mapIndexedNotNull { index, item ->
-        val layoutId = item.layoutId
-        if (layoutId.isNullOrBlank() && index > 0) return@mapIndexedNotNull null
-        val routeId = if (index == 0 || layoutId.isNullOrBlank()) {
-            OttRoutes.HOME
-        } else {
-            OttRoutes.layout(layoutId)
+    if (items.isEmpty()) return emptyList()
+    var firstLayoutAssigned = false
+    return items.mapNotNull { item ->
+        val routeId = resolveCmsMenuRoute(item, preferHome = !firstLayoutAssigned) ?: return@mapNotNull null
+        if (routeId == OttRoutes.HOME || routeId.startsWith("layout/")) {
+            firstLayoutAssigned = true
         }
         OttMenuItem(
             id = routeId,
@@ -305,10 +312,24 @@ private fun buildCmsNavItems(items: List<AppMenuItem>): List<OttMenuItem> {
             iconUrl = item.defaultIconUrl,
             selectedIconUrl = item.selectedIconUrl,
             focusedIconUrl = item.focusedIconUrl,
-            layoutId = layoutId,
+            layoutId = item.layoutId,
             children = item.children,
         )
     }
+}
+
+private fun resolveCmsMenuRoute(item: AppMenuItem, preferHome: Boolean): String? {
+    val haystack = listOf(item.title, item.deeplinkUrl, item.deeplinkType, item.id)
+        .joinToString(" ")
+        .lowercase()
+    when {
+        "search" in haystack -> return OttRoutes.SEARCH
+        listOf("watchlist", "library", "my list", "mylist", "favorites").any { it in haystack } ->
+            return OttRoutes.WATCHLIST
+    }
+    val layoutId = item.layoutId
+    if (layoutId.isNullOrBlank()) return null
+    return if (preferHome) OttRoutes.HOME else OttRoutes.layout(layoutId)
 }
 
 private fun contentIdArg(entry: NavBackStackEntry): String {

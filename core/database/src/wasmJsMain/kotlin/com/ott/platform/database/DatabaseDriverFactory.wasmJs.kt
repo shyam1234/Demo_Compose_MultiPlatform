@@ -53,6 +53,9 @@ private data class StoredCategory(
     val description: String = "",
     val displayType: String = "Landscape",
     val contentType: String = "generic",
+    val hasBackgroundImage: Boolean = false,
+    val backgroundImageUrl: String? = null,
+    val deviceTypes: List<String> = emptyList(),
 )
 
 @Serializable
@@ -91,6 +94,9 @@ private fun Category.toStored() = StoredCategory(
     description = description,
     displayType = displayType,
     contentType = contentType,
+    hasBackgroundImage = hasBackgroundImage,
+    backgroundImageUrl = backgroundImageUrl,
+    deviceTypes = deviceTypes,
 )
 
 private fun StoredCategory.toDomain() = Category(
@@ -99,6 +105,9 @@ private fun StoredCategory.toDomain() = Category(
     description = description,
     displayType = displayType,
     contentType = contentType,
+    hasBackgroundImage = hasBackgroundImage,
+    backgroundImageUrl = backgroundImageUrl,
+    deviceTypes = deviceTypes,
 )
 
 private fun Channel.toStored() = StoredChannel(
@@ -343,10 +352,10 @@ private class WebCatalogLocalDataSource : CatalogLocalDataSource {
     }
 
     private companion object {
-        const val KEY_MENU = "ott_web_cms_menu_v2"
-        const val KEY_LAYOUTS = "ott_web_cms_layouts_v2"
-        const val KEY_CATEGORIES = "ott_web_cms_categories_v2"
-        const val KEY_SHELVES = "ott_web_cms_shelves_v2"
+        const val KEY_MENU = "ott_web_cms_menu_v3"
+        const val KEY_LAYOUTS = "ott_web_cms_layouts_v3"
+        const val KEY_CATEGORIES = "ott_web_cms_categories_v3"
+        const val KEY_SHELVES = "ott_web_cms_shelves_v3"
     }
 }
 

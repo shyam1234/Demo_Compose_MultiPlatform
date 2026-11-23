@@ -28,6 +28,12 @@ data class Category(
     val description: String = "",
     val displayType: String = "Landscape",
     val contentType: String = "generic",
+    /** CMS `rail_background_image` — drives thematic rail chrome. */
+    val hasBackgroundImage: Boolean = false,
+    /** CMS `rail_images` URL with imagetype `Rail_Background_Image`. */
+    val backgroundImageUrl: String? = null,
+    /** CMS rail `devicetype` allow-list (empty = all). */
+    val deviceTypes: List<String> = emptyList(),
 )
 
 data class Channel(
@@ -59,8 +65,13 @@ data class Channel(
     val trailerUrl: String? = null,
     val language: String? = null,
 ) {
+    /** True when CMS provided a primary stream URL. */
     val isPlayable: Boolean
         get() = streamUrl.isNotBlank()
+
+    /** True when the player can start (primary stream or trailer preview). */
+    val canPlay: Boolean
+        get() = streamUrl.isNotBlank() || !trailerUrl.isNullOrBlank()
 
     fun imageFor(slot: ImageSlot): String? =
         images.resolveUrl(slot = slot, fallbackUrl = backdropUrl ?: logoUrl)
@@ -104,21 +115,25 @@ enum class ShelfCardStyle {
 }
 
 enum class RailContentType {
+    Hero,
     Editorial,
     Top10,
     New,
     Mosaic,
     Grid,
+    DiscoveryDock,
     Generic,
     ;
 
     companion object {
         fun fromCms(raw: String?): RailContentType = when (raw.orEmpty().trim().lowercase()) {
-            "editorial", "hero", "featured" -> Editorial
+            "hero", "featured", "hero_banner", "herobanner" -> Hero
+            "editorial" -> Editorial
             "top_10", "top10", "trending_top10" -> Top10
             "new", "new_releases" -> New
             "mosaic" -> Mosaic
             "grid" -> Grid
+            "discovery_dock", "discovery-dock", "discoverydock" -> DiscoveryDock
             else -> Generic
         }
     }
@@ -132,7 +147,36 @@ data class ContentShelf(
     val contentType: RailContentType = RailContentType.Generic,
     val rawDisplayType: String = cardStyle.name,
     val rawContentType: String = contentType.name.lowercase(),
-)
+    /** CMS `rail_background_image` — enables thematic rail chrome. */
+    val hasBackgroundImage: Boolean = false,
+    /** Resolved URL from CMS `rail_images` with imagetype `Rail_Background_Image`. */
+    val backgroundImageUrl: String? = null,
+    /**
+     * CMS discovery-dock tabs (`discovery_dock_rail_response` / `discovery_dock_rail_ids`).
+     * Each tab is itself a [ContentShelf] whose title is the subtitle tab label.
+     */
+    val discoveryDockTabs: List<ContentShelf> = emptyList(),
+    /** CMS rail `devicetype` allow-list (empty = all devices). */
+    val deviceTypes: List<String> = emptyList(),
+) {
+    val isDiscoveryDock: Boolean
+        get() = contentType == RailContentType.DiscoveryDock || discoveryDockTabs.isNotEmpty()
+
+    /** Thematic chrome is driven by CMS `rail_background_image` (artwork URL is optional). */
+    val isThematic: Boolean
+        get() = hasBackgroundImage
+
+    /**
+     * Hero banner rails are only those CMS explicitly marks as hero/featured,
+     * or with a Hero/Billboard display type — never inferred from generic shelves.
+     */
+    val isHeroRail: Boolean
+        get() {
+            if (contentType == RailContentType.Hero) return true
+            val display = rawDisplayType.trim().lowercase()
+            return display in setOf("hero", "billboard", "hero_banner", "herobanner")
+        }
+}
 
 data class HomeFeed(
     val heroes: List<Channel> = emptyList(),

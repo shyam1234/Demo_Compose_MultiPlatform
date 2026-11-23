@@ -5,6 +5,7 @@ import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.ContentId
 import com.ott.platform.domain.model.ContentShelf
 import com.ott.platform.domain.model.ImageSlot
+import com.ott.platform.domain.model.ImageTypes
 import com.ott.platform.domain.model.MediaImage
 import com.ott.platform.domain.model.RailContentType
 import com.ott.platform.domain.model.ShelfCardStyle
@@ -16,6 +17,7 @@ data class CmsLayout(
     val name: String,
     val themeUrl: String?,
     val railIds: List<String>,
+    val deviceTypes: List<String> = emptyList(),
 )
 
 data class CmsRail(
@@ -26,6 +28,11 @@ data class CmsRail(
     val rawDisplayType: String,
     val rawContentType: String,
     val items: List<Channel>,
+    val hasBackgroundImage: Boolean = false,
+    val backgroundImageUrl: String? = null,
+    val discoveryDockTabs: List<CmsRail> = emptyList(),
+    val discoveryDockRailIds: List<String> = emptyList(),
+    val deviceTypes: List<String> = emptyList(),
 ) {
     fun toContentShelf(limit: Int = items.size): ContentShelf = ContentShelf(
         id = id,
@@ -35,6 +42,10 @@ data class CmsRail(
         contentType = contentType,
         rawDisplayType = rawDisplayType,
         rawContentType = rawContentType,
+        hasBackgroundImage = hasBackgroundImage,
+        backgroundImageUrl = backgroundImageUrl,
+        discoveryDockTabs = discoveryDockTabs.map { it.toContentShelf(limit = it.items.size) },
+        deviceTypes = deviceTypes,
     )
 }
 
@@ -54,8 +65,11 @@ object CmsCatalogMapper {
     fun mapMenu(
         response: CmsMenuResponseDto,
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
+        deviceType: String = platformCmsMenuDeviceType(),
     ): List<AppMenuItem> {
-        val groups = response.results.filter { it.publishNow != 0 }
+        val groups = response.results
+            .filter { it.publishNow != 0 }
+            .filter { CmsDeviceType.matches(it.deviceType, deviceType) }
         return groups.flatMap { group ->
             group.menuL1.mapNotNull { l1 ->
                 val title = l1.menuL1Title.trim()
@@ -105,6 +119,7 @@ object CmsCatalogMapper {
             name = dto.name.trim().ifEmpty { "Home" },
             themeUrl = normalizeAssetUrl(dto.theme?.themeUrl, baseUrl),
             railIds = orderedRails,
+            deviceTypes = dto.deviceType,
         )
     }
 
@@ -112,6 +127,8 @@ object CmsCatalogMapper {
         dto: CmsRailDto,
         fallbackRailId: String,
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
+        mapDiscoveryDockChildren: Boolean = true,
+        deviceType: String = platformCmsMenuDeviceType(),
     ): CmsRail {
         val railId = dto.id.ifBlank { fallbackRailId }
         val railTitle = dto.name.trim().ifEmpty { "Featured" }
@@ -119,6 +136,7 @@ object CmsCatalogMapper {
         val rawContentType = dto.railContentType.trim().ifEmpty { "generic" }
         val contentType = RailContentType.fromCms(rawContentType)
         val cardStyle = ShelfCardStyle.fromCms(rawDisplayType, rawContentType)
+        val deviceTypes = dto.deviceType
         val assets = dto.existingAsset?.assets.orEmpty()
             .filter { it.publishNow != 0 }
             .map { asset ->
@@ -129,8 +147,45 @@ object CmsCatalogMapper {
                     rawDisplayType = rawDisplayType,
                     contentType = contentType,
                     baseUrl = baseUrl,
+                    deviceType = deviceType,
                 )
             }
+        val backgroundImages = CmsDeviceType.filterImagesForDevice(dto.railImages, deviceType)
+        val backgroundImageUrl = resolveRailBackgroundImageUrl(backgroundImages, baseUrl)
+        // CMS boolean is authoritative; artwork may 502 / be delayed but chrome must still apply.
+        val hasBackgroundImage = dto.railBackgroundImage
+        val dockIds = dto.discoveryDockRailIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val dockTabs = if (mapDiscoveryDockChildren) {
+            val fromResponse = dto.discoveryDockRailResponse
+                .filter { it.publishNow != 0 }
+                .filter { CmsDeviceType.matches(it.deviceType, deviceType) }
+                .map { child ->
+                    mapRail(
+                        dto = child,
+                        fallbackRailId = child.id.ifBlank { child.railCode },
+                        baseUrl = baseUrl,
+                        mapDiscoveryDockChildren = false,
+                        deviceType = deviceType,
+                    )
+                }
+            if (fromResponse.isNotEmpty()) {
+                fromResponse
+            } else {
+                dockIds.map { id ->
+                    CmsRail(
+                        id = id,
+                        title = id,
+                        cardStyle = ShelfCardStyle.Landscape,
+                        contentType = RailContentType.Generic,
+                        rawDisplayType = "Landscape",
+                        rawContentType = "generic",
+                        items = emptyList(),
+                    )
+                }
+            }
+        } else {
+            emptyList()
+        }
         return CmsRail(
             id = railId,
             title = railTitle,
@@ -139,8 +194,28 @@ object CmsCatalogMapper {
             rawDisplayType = rawDisplayType,
             rawContentType = rawContentType,
             items = assets,
+            hasBackgroundImage = hasBackgroundImage,
+            backgroundImageUrl = backgroundImageUrl,
+            discoveryDockTabs = dockTabs,
+            discoveryDockRailIds = dockIds,
+            deviceTypes = deviceTypes,
         )
     }
+
+    fun resolveRailBackgroundImageUrl(
+        images: List<CmsAssetImageDto>,
+        baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
+    ): String? {
+        val preferred = images.firstOrNull { img ->
+            normalizeImageType(img.imagetype) == normalizeImageType(ImageTypes.RAIL_BACKGROUND_IMAGE)
+        } ?: images.firstOrNull()
+        return preferred?.let { img ->
+            normalizeAssetUrl(img.imgurl, baseUrl) ?: normalizeAssetUrl(img.imageurl, baseUrl)
+        }
+    }
+
+    private fun normalizeImageType(raw: String): String =
+        raw.trim().lowercase().replace(Regex("[\\s_\\-]+"), "")
 
     fun mapAsset(
         dto: CmsAssetDto,
@@ -149,6 +224,7 @@ object CmsCatalogMapper {
         rawDisplayType: String,
         contentType: RailContentType,
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
+        deviceType: String = platformCmsMenuDeviceType(),
     ): Channel {
         val fallbackName = (dto.name as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty().trim()
         val title = dto.title.trim()
@@ -162,7 +238,7 @@ object CmsCatalogMapper {
             .ifEmpty { dto.externalId.trim() }
             .ifEmpty { "${railId}:${title.lowercase().replace(Regex("[^a-z0-9]+"), "-")}" }
 
-        val mappedImages = dto.images.mapNotNull { img ->
+        val mappedImages = CmsDeviceType.filterImagesForDevice(dto.images, deviceType).mapNotNull { img ->
             val resolved = normalizeAssetUrl(img.imgurl, baseUrl)
                 ?: normalizeAssetUrl(img.imageurl, baseUrl)
                 ?: return@mapNotNull null

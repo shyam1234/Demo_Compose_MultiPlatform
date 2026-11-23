@@ -12,6 +12,7 @@ kotlin {
             implementation(projects.apps.shared)
             implementation(projects.platform.android)
             implementation(projects.core.di)
+            implementation(projects.core.data)
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.appcompat)
             implementation(libs.androidx.core.ktx)

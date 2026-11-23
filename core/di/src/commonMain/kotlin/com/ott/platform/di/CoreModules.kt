@@ -35,6 +35,7 @@ val coreNetworkModule = module {
 }
 
 val coreDataModule = module {
+    // Apps may override with a device-specific CmsConfig (e.g. androidtv vs android).
     single { CmsConfig() }
     single { CmsAuthManager(httpClient = get(), logger = get(), config = get()) }
     single {

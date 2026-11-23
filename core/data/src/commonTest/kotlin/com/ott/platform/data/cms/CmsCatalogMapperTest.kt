@@ -216,4 +216,213 @@ class CmsCatalogMapperTest {
         assertTrue(show.logoUrl!!.startsWith("https://cms.play-cms.com/mount/images/colony.jpeg"))
         assertEquals(ImageTypes.LANDSCAPE, show.images.single().type)
     }
+
+    @Test
+    fun `maps thematic rail background image from CMS rail_images`() {
+        val railJson = """
+            {
+              "count": 1,
+              "results": [
+                {
+                  "_id": "thematic_1",
+                  "name": "Premier League Highlights",
+                  "rail_content_type": "new",
+                  "rail_display_type": "Landscape",
+                  "rail_background_image": true,
+                  "publish_now": 1,
+                  "rail_images": [
+                    {
+                      "imagetype": "Rail_Background_Image",
+                      "imageurl": "/mount/images/rail-bg.png",
+                      "imagewidth": 1840,
+                      "imageheight": 346
+                    }
+                  ],
+                  "existing_asset": {
+                    "count": 1,
+                    "existing_asset": [
+                      {
+                        "asset_id": "pl_1",
+                        "title": "Arsenal Vs Manchester City",
+                        "publish_now": 1,
+                        "playback_urls": { "hls_url": "" },
+                        "images": [
+                          {
+                            "imagetype": "Landscape",
+                            "imgurl": "https://cms.play-cms.com/match.png",
+                            "imagewidth": 1920,
+                            "imageheight": 1080
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+        val rail = CmsCatalogMapper.mapRail(
+            OttJson.instance.decodeFromString<CmsRailsResponseDto>(railJson).results.single(),
+            fallbackRailId = "fallback",
+        )
+        val shelf = rail.toContentShelf()
+
+        assertTrue(rail.hasBackgroundImage)
+        assertEquals(
+            "https://cms.play-cms.com/mount/images/rail-bg.png",
+            rail.backgroundImageUrl,
+        )
+        assertTrue(shelf.isThematic)
+        assertEquals(1, shelf.items.size)
+
+        // Flag alone enables thematic chrome even if artwork URL is absent.
+        val flagOnlyJson = """
+            {
+              "count": 1,
+              "results": [{
+                "_id": "thematic_flag_only",
+                "name": "On Air",
+                "rail_content_type": "generic",
+                "rail_display_type": "Landscape",
+                "rail_background_image": true,
+                "publish_now": 1,
+                "rail_images": [],
+                "existing_asset": { "count": 0, "existing_asset": [] }
+              }]
+            }
+        """.trimIndent()
+        val flagOnly = CmsCatalogMapper.mapRail(
+            OttJson.instance.decodeFromString<CmsRailsResponseDto>(flagOnlyJson).results.single(),
+            fallbackRailId = "fallback",
+        )
+        assertTrue(flagOnly.hasBackgroundImage)
+        assertTrue(flagOnly.toContentShelf().isThematic)
+    }
+
+    @Test
+    fun `maps discovery_dock tabs from nested rail response`() {
+        val railJson = """
+            {
+              "count": 1,
+              "results": [
+                {
+                  "_id": "dock_1",
+                  "name": "Enjoy the Game",
+                  "rail_content_type": "discovery_dock",
+                  "rail_display_type": "Landscape",
+                  "rail_background_image": false,
+                  "publish_now": 1,
+                  "discovery_dock_rail_ids": ["tab_a", "tab_b"],
+                  "discovery_dock_rail_response": [
+                    {
+                      "_id": "tab_a",
+                      "name": "FIFA World Cup Highlights",
+                      "rail_content_type": "editorial",
+                      "rail_display_type": "Portrait",
+                      "publish_now": 1,
+                      "existing_asset": {
+                        "count": 1,
+                        "existing_asset": [
+                          {
+                            "asset_id": "fifa_1",
+                            "title": "Spain Vs Argentina",
+                            "publish_now": 1,
+                            "images": [
+                              {
+                                "imagetype": "Portrait",
+                                "imgurl": "https://cms.play-cms.com/fifa.png",
+                                "imagewidth": 729,
+                                "imageheight": 1080
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "_id": "tab_b",
+                      "name": "UEFA Nations League Highlights",
+                      "rail_content_type": "editorial",
+                      "rail_display_type": "Landscape",
+                      "publish_now": 1,
+                      "existing_asset": {
+                        "count": 1,
+                        "existing_asset": [
+                          {
+                            "asset_id": "uefa_1",
+                            "title": "Spain Vs England",
+                            "publish_now": 1,
+                            "playback_urls": {
+                              "hls_url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+                            },
+                            "images": [
+                              {
+                                "imagetype": "Landscape",
+                                "imgurl": "https://cms.play-cms.com/uefa.png",
+                                "imagewidth": 1920,
+                                "imageheight": 1080
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "existing_asset": { "count": 0, "existing_asset": [] }
+                }
+              ]
+            }
+        """.trimIndent()
+        val rail = CmsCatalogMapper.mapRail(
+            OttJson.instance.decodeFromString<CmsRailsResponseDto>(railJson).results.single(),
+            fallbackRailId = "fallback",
+        )
+        val shelf = rail.toContentShelf()
+
+        assertEquals(RailContentType.DiscoveryDock, rail.contentType)
+        assertTrue(shelf.isDiscoveryDock)
+        assertEquals(2, shelf.discoveryDockTabs.size)
+        assertEquals("FIFA World Cup Highlights", shelf.discoveryDockTabs[0].title)
+        assertEquals("UEFA Nations League Highlights", shelf.discoveryDockTabs[1].title)
+        assertEquals(ShelfCardStyle.Portrait, shelf.discoveryDockTabs[0].cardStyle)
+        assertTrue(shelf.discoveryDockTabs[1].items.single().canPlay)
+    }
+
+    @Test
+    fun `filters menu groups and rails by CMS device type`() {
+        val menuJson = """
+            {
+              "count": 2,
+              "results": [
+                {
+                  "_id": "web_only",
+                  "publish_now": 1,
+                  "devicetype": ["web"],
+                  "menuGroupDeeplinkUrl": "http://layouts/web_home",
+                  "menuL1": [
+                    { "menuL1Id": "home", "menuL1Title": "HOME", "menuL1DeeplinkUrl": "web_home" }
+                  ]
+                },
+                {
+                  "_id": "tv_only",
+                  "publish_now": 1,
+                  "devicetype": ["androidtv", "atv_ott"],
+                  "menuL1": [
+                    { "menuL1Id": "tv", "menuL1Title": "TV Home", "menuL1DeeplinkUrl": "tv_home" }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+        val menuDto = OttJson.instance.decodeFromString<CmsMenuResponseDto>(menuJson)
+        val webMenu = CmsCatalogMapper.mapMenu(menuDto, deviceType = "web")
+        assertEquals(listOf("HOME"), webMenu.map { it.title })
+        val tvMenu = CmsCatalogMapper.mapMenu(menuDto, deviceType = "androidtv")
+        assertEquals(listOf("TV Home"), tvMenu.map { it.title })
+
+        assertTrue(CmsDeviceType.matches(listOf("web"), "web"))
+        assertTrue(!CmsDeviceType.matches(listOf("androidtv", "atv_ott"), "web"))
+        assertTrue(CmsDeviceType.matches(listOf("All"), "web"))
+        assertTrue(CmsDeviceType.matches(emptyList(), "web"))
+    }
 }

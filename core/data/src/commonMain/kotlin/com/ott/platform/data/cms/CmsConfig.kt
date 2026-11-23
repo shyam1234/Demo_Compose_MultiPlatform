@@ -3,7 +3,14 @@ package com.ott.platform.data.cms
 data class CmsConfig(
     val baseUrl: String = DEFAULT_BASE_URL,
     val loginDeviceType: String = DEFAULT_LOGIN_DEVICE_TYPE,
-    val menuDeviceType: String = DEFAULT_MENU_DEVICE_TYPE,
+    val menuDeviceType: String = platformCmsMenuDeviceType(),
+    /** Used to filter rails / images / layouts by CMS `devicetype`. Defaults to [menuDeviceType]. */
+    val contentDeviceType: String = menuDeviceType,
+    /**
+     * When true (customer config `deviceTypeOptOut` / debug ignore), skip CMS device filtering
+     * so all published rails/menus for the layout are shown.
+     */
+    val deviceTypeOptOut: Boolean = false,
     val langCode: String = DEFAULT_LANG_CODE,
     val username: String = DEFAULT_USERNAME,
     val password: String = DEFAULT_PASSWORD,
@@ -22,6 +29,9 @@ data class CmsConfig(
 
     fun railUrl(railId: String): String =
         "$baseUrl/v2/rails?id=$railId"
+
+    fun matchesDevice(allowedDevices: List<String>): Boolean =
+        deviceTypeOptOut || CmsDeviceType.matches(allowedDevices, contentDeviceType)
 
     companion object {
         const val DEFAULT_BASE_URL = "https://cms.play-cms.com"

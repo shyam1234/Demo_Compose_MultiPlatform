@@ -12,7 +12,6 @@ import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.ContentId
 import com.ott.platform.domain.model.ContentShelf
 import com.ott.platform.domain.model.HomeFeed
-import com.ott.platform.domain.model.ImageSlot
 import com.ott.platform.domain.model.OttResult
 import com.ott.platform.domain.model.RailContentType
 import com.ott.platform.domain.model.ShelfCardStyle
@@ -102,13 +101,14 @@ class CmsCatalogRepository(
         val menuItems = when (val menuResult = getMenu()) {
             is OttResult.Success -> menuResult.data
             is OttResult.Error -> {
-                logger.w(TAG, "Menu fetch failed (${menuResult.message}); trying fallback layout")
+                logger.w(TAG, "Menu fetch failed (${menuResult.message}); no CMS home without menu")
                 emptyList()
             }
             OttResult.Loading -> emptyList()
         }
+        // Home is CMS-driven only — never invent a layout when the device menu is empty.
         val primaryLayoutId = menuItems.firstOrNull { !it.layoutId.isNullOrBlank() }?.layoutId
-            ?: config.fallbackLayoutId
+            ?: return@runCatchingResult HomeFeed()
         when (val feedResult = getLayoutFeed(primaryLayoutId, limitPerShelf)) {
             is OttResult.Success -> feedResult.data
             is OttResult.Error -> throw feedResult.cause ?: IllegalStateException(feedResult.message)
@@ -130,17 +130,19 @@ class CmsCatalogRepository(
                             logger.w(TAG, "Skipping rail $railId: ${error.message}")
                         }.getOrNull()
                     }
-                }.awaitAll().filterNotNull().filter { it.items.isNotEmpty() }
+                }.awaitAll().filterNotNull()
+                    .filter { shelf -> config.matchesDevice(shelf.deviceTypes) }
+                    .filter { shelf -> shelf.items.isNotEmpty() || shelf.isDiscoveryDock }
             }
 
             if (shelves.isEmpty()) {
                 firstFailure?.let { throw it }
             }
 
-            val heroes = selectHeroes(shelves)
+            val (heroes, contentShelves) = partitionHeroAndContentShelves(shelves)
             HomeFeed(
                 heroes = heroes,
-                shelves = shelves,
+                shelves = contentShelves,
                 layoutId = layout.id,
                 layoutName = layout.name,
                 themeUrl = layout.themeUrl,
@@ -205,7 +207,7 @@ class CmsCatalogRepository(
                 listOfNotNull(item.layoutId) + item.children.mapNotNull { it.layoutId }
             }.distinct()
             else -> emptyList()
-        }.ifEmpty { listOf(config.fallbackLayoutId) }
+        }
 
         menuLayoutIds.forEach { layoutId ->
             runCatching { getLayoutFeed(layoutId, DEFAULT_RAIL_FETCH_LIMIT) }
@@ -286,13 +288,18 @@ class CmsCatalogRepository(
                 name = fetchedRail.title,
                 displayType = fetchedRail.rawDisplayType,
                 contentType = fetchedRail.rawContentType,
+                hasBackgroundImage = fetchedRail.hasBackgroundImage,
+                backgroundImageUrl = fetchedRail.backgroundImageUrl,
+                deviceTypes = fetchedRail.deviceTypes,
             )
             runCatching {
                 local?.upsertCategory(category, sortOrder)
                 local?.replaceChannelsForCategory(railId, fetchedRail.items)
             }.onFailure { logger.w(TAG, "Failed to persist rail $railId: ${it.message}", it) }
 
-            val shelf = fetchedRail.toContentShelf(limit = fetchedRail.items.size)
+            val shelf = enrichDiscoveryDock(
+                fetchedRail.toContentShelf(limit = fetchedRail.items.size),
+            )
             cacheShelfInMemory(railId, shelf)
             shelf.copy(items = shelf.items.take(limit))
         } catch (t: Throwable) {
@@ -305,6 +312,28 @@ class CmsCatalogRepository(
                 throw t
             }
         }
+    }
+
+    /**
+     * Discovery-dock nested payloads often omit assets for linked subrails.
+     * Fill empty tabs by fetching each linked rail id (uses in-memory cache when available).
+     */
+    private suspend fun enrichDiscoveryDock(shelf: ContentShelf): ContentShelf {
+        if (!shelf.isDiscoveryDock) return shelf
+        val tabs = shelf.discoveryDockTabs.mapIndexed { index, tab ->
+            if (!config.matchesDevice(tab.deviceTypes)) return@mapIndexed null
+            if (tab.items.isNotEmpty()) {
+                cacheShelfInMemory(tab.id, tab)
+                return@mapIndexed tab
+            }
+            runCatching {
+                loadRail(tab.id, sortOrder = index, limit = DEFAULT_RAIL_FETCH_LIMIT)
+            }.onFailure { error ->
+                logger.w(TAG, "Discovery dock tab ${tab.id} failed: ${error.message}")
+            }.getOrNull()
+                ?.takeIf { config.matchesDevice(it.deviceTypes) }
+        }.filterNotNull()
+        return shelf.copy(discoveryDockTabs = tabs)
     }
 
     private fun buildShelfFromDb(
@@ -323,6 +352,9 @@ class CmsCatalogRepository(
             contentType = RailContentType.fromCms(rawContent),
             rawDisplayType = rawDisplay,
             rawContentType = rawContent,
+            hasBackgroundImage = dbCategory?.hasBackgroundImage == true,
+            backgroundImageUrl = dbCategory?.backgroundImageUrl,
+            deviceTypes = dbCategory?.deviceTypes.orEmpty(),
         )
     }
 
@@ -330,22 +362,27 @@ class CmsCatalogRepository(
         mutex.withLock {
             shelfCache[railId] = shelf
             shelf.items.forEach { channelIndex[it.id.value] = it }
+            shelf.discoveryDockTabs.forEach { tab ->
+                shelfCache[tab.id] = tab
+                tab.items.forEach { channelIndex[it.id.value] = it }
+            }
         }
     }
 
-    private fun selectHeroes(shelves: List<ContentShelf>): List<Channel> {
-        val allItems = shelves.flatMap { it.items }
-        val playable = allItems.filter { it.isPlayable && it.imageFor(ImageSlot.Hero) != null }
-        val newOrEditorial = shelves
-            .filter { it.contentType == RailContentType.Editorial || it.contentType == RailContentType.New }
+    /**
+     * Hero banner is CMS-defined only (`rail_content_type=hero/featured` or Hero/Billboard display).
+     * Never synthesize a hero from ordinary shelves.
+     */
+    private fun partitionHeroAndContentShelves(
+        shelves: List<ContentShelf>,
+    ): Pair<List<Channel>, List<ContentShelf>> {
+        val heroShelves = shelves.filter { it.isHeroRail }
+        val contentShelves = shelves.filterNot { it.isHeroRail }
+        val heroes = heroShelves
             .flatMap { it.items }
-        val candidates = (playable + newOrEditorial + allItems)
-            .filter { it.imageFor(ImageSlot.Hero) != null }
             .distinctBy { it.id.value }
             .take(HERO_COUNT)
-        return candidates.ifEmpty {
-            listOfNotNull(allItems.firstOrNull())
-        }
+        return heroes to contentShelves
     }
 
     private fun isFresh(updatedAtMs: Long?): Boolean {

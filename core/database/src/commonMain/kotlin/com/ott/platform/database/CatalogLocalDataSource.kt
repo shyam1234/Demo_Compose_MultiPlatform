@@ -99,27 +99,11 @@ class SqlDelightCatalogLocalDataSource(
     }
 
     override suspend fun getCategories(): List<Category> = withContext(ioDispatcher) {
-        queries.selectAllCategories().executeAsList().map { row ->
-            Category(
-                id = row.id,
-                name = row.name,
-                description = row.description,
-                displayType = row.rail_display_type,
-                contentType = row.rail_content_type,
-            )
-        }
+        queries.selectAllCategories().executeAsList().map { row -> row.toCategory() }
     }
 
     override suspend fun getCategory(categoryId: String): Category? = withContext(ioDispatcher) {
-        queries.selectCategoryById(categoryId).executeAsOneOrNull()?.let { row ->
-            Category(
-                id = row.id,
-                name = row.name,
-                description = row.description,
-                displayType = row.rail_display_type,
-                contentType = row.rail_content_type,
-            )
-        }
+        queries.selectCategoryById(categoryId).executeAsOneOrNull()?.toCategory()
     }
 
     override suspend fun getCategoriesUpdatedAtMs(): Long? = withContext(ioDispatcher) {
@@ -134,7 +118,7 @@ class SqlDelightCatalogLocalDataSource(
                 queries.upsertCategory(
                     id = category.id,
                     name = category.name,
-                    description = category.description,
+                    description = category.persistedDescription(),
                     rail_display_type = category.displayType,
                     rail_content_type = category.contentType,
                     sort_order = index.toLong(),
@@ -149,7 +133,7 @@ class SqlDelightCatalogLocalDataSource(
             queries.upsertCategory(
                 id = category.id,
                 name = category.name,
-                description = category.description,
+                description = category.persistedDescription(),
                 rail_display_type = category.displayType,
                 rail_content_type = category.contentType,
                 sort_order = sortOrder.toLong(),
@@ -247,6 +231,27 @@ class SqlDelightCatalogLocalDataSource(
             language = meta.language,
         )
     }
+
+    private fun Categories.toCategory(): Category {
+        val meta = decodeCategoryRailMeta(description)
+        return Category(
+            id = id,
+            name = name,
+            description = meta.note,
+            displayType = rail_display_type,
+            contentType = rail_content_type,
+            hasBackgroundImage = meta.hasBackgroundImage,
+            backgroundImageUrl = meta.backgroundImageUrl,
+            deviceTypes = meta.deviceTypes,
+        )
+    }
+
+    private fun Category.persistedDescription(): String = encodeCategoryDescription(
+        hasBackgroundImage = hasBackgroundImage,
+        backgroundImageUrl = backgroundImageUrl,
+        deviceTypes = deviceTypes,
+        note = description,
+    )
 
     private companion object {
         const val MENU_ROW_ID = "default_menu"

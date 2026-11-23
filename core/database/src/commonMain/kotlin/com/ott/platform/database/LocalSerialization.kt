@@ -1,14 +1,58 @@
 package com.ott.platform.database
 
 import com.ott.platform.domain.model.AppMenuItem
+import com.ott.platform.domain.model.Category
 import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.MediaImage
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 internal val localDbJson = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
+}
+
+/**
+ * Thematic rail metadata persisted inside SQLDelight `categories.description`
+ * (avoids a schema bump while keeping CMS `rail_background_image` offline).
+ */
+@Serializable
+internal data class StoredCategoryRailMeta(
+    val hasBackgroundImage: Boolean = false,
+    val backgroundImageUrl: String? = null,
+    val deviceTypes: List<String> = emptyList(),
+    val note: String = "",
+)
+
+internal fun encodeCategoryDescription(
+    hasBackgroundImage: Boolean,
+    backgroundImageUrl: String?,
+    deviceTypes: List<String> = emptyList(),
+    note: String = "",
+): String {
+    if (!hasBackgroundImage &&
+        backgroundImageUrl.isNullOrBlank() &&
+        deviceTypes.isEmpty() &&
+        note.isBlank()
+    ) {
+        return ""
+    }
+    return localDbJson.encodeToString(
+        StoredCategoryRailMeta(
+            hasBackgroundImage = hasBackgroundImage,
+            backgroundImageUrl = backgroundImageUrl,
+            deviceTypes = deviceTypes,
+            note = note,
+        ),
+    )
+}
+
+internal fun decodeCategoryRailMeta(raw: String): StoredCategoryRailMeta {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return StoredCategoryRailMeta()
+    return runCatching { localDbJson.decodeFromString<StoredCategoryRailMeta>(trimmed) }
+        .getOrElse { StoredCategoryRailMeta(note = raw) }
 }
 
 @Serializable

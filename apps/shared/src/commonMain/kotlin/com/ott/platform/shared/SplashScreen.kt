@@ -17,14 +17,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ott.platform.designsystem.OttColors
+import com.ott.platform.shared.branding.LocalActiveCustomer
+import com.ott.platform.shared.branding.SplashMediaType
+import com.ott.platform.shared.branding.parseColorHex
 import com.ott.platform.shared.generated.resources.Res
 import com.ott.platform.shared.generated.resources.splash_ott
-import kotlin.time.Duration.Companion.seconds
+import com.ott.platform.ui.components.RemoteImage
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 
@@ -32,9 +37,10 @@ import org.jetbrains.compose.resources.painterResource
 fun SplashRoute(
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
-    holdFor: kotlin.time.Duration = 3.seconds,
 ) {
-    LaunchedEffect(Unit) {
+    val customer = LocalActiveCustomer.current
+    val holdFor = customer.splash.durationMs.milliseconds
+    LaunchedEffect(customer.id, customer.splash.durationMs) {
         delay(holdFor)
         onFinished()
     }
@@ -45,10 +51,14 @@ fun SplashRoute(
 fun SplashScreen(
     modifier: Modifier = Modifier,
 ) {
+    val customer = LocalActiveCustomer.current
+    val splash = customer.splash
+    val background = parseColorHex(splash.backgroundColor, OttColors.Background)
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(OttColors.Background)
+            .background(background)
             .testTag("splash_screen"),
         contentAlignment = Alignment.Center,
     ) {
@@ -57,10 +67,11 @@ fun SplashScreen(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(32.dp),
         ) {
-            Image(
-                painter = painterResource(Res.drawable.splash_ott),
-                contentDescription = "OTT splash",
-                contentScale = ContentScale.Fit,
+            SplashMedia(
+                type = splash.type,
+                source = splash.source,
+                posterSource = splash.posterSource,
+                contentDescription = "${customer.brandName} splash",
                 modifier = Modifier
                     .widthIn(max = 720.dp)
                     .fillMaxWidth(0.7f)
@@ -68,16 +79,65 @@ fun SplashScreen(
             )
             Spacer(Modifier.height(28.dp))
             Text(
-                text = "OTT Platform",
+                text = splash.title,
                 style = MaterialTheme.typography.headlineLarge,
                 color = OttColors.OnSurface,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Streaming demo",
+                text = splash.subtitle,
                 style = MaterialTheme.typography.bodyLarge,
-                color = OttColors.AccentSoft,
+                color = parseColorHex(customer.theme.accentSoft, OttColors.AccentSoft),
+            )
+        }
+    }
+}
+
+/**
+ * Renders splash media.
+ * - `image` / `gif`: remote URL via [RemoteImage], or bundled Compose drawable (`compose:name`)
+ * - `video` (mp4/HLS): shows [posterSource] for now (non-disruptive); platforms can later
+ *   swap in a real video surface without changing config shape
+ */
+@Composable
+private fun SplashMedia(
+    type: SplashMediaType,
+    source: String,
+    posterSource: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    val effectiveSource = when (type) {
+        SplashMediaType.Video -> posterSource.ifBlank { source }
+        SplashMediaType.Image, SplashMediaType.Gif -> source
+    }
+    when {
+        effectiveSource.startsWith("compose:", ignoreCase = true) -> {
+            Image(
+                painter = painterResource(Res.drawable.splash_ott),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                modifier = modifier,
+            )
+        }
+        effectiveSource.startsWith("http://", ignoreCase = true) ||
+            effectiveSource.startsWith("https://", ignoreCase = true) -> {
+            Box(modifier = modifier.background(Color.Transparent)) {
+                RemoteImage(
+                    url = effectiveSource,
+                    contentDescription = contentDescription,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        else -> {
+            Image(
+                painter = painterResource(Res.drawable.splash_ott),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                modifier = modifier,
             )
         }
     }
