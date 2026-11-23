@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -201,8 +200,9 @@ private fun ThematicShelfBody(
         ShelfCardStyle.Banner -> if (isTv) OttDimens.TvBannerCardHeight else OttDimens.BannerCardHeight
         ShelfCardStyle.Landscape -> if (isTv) OttDimens.TvCardHeight else OttDimens.CardHeight
     }
-    // Panel tall enough for poster + title/year, with room to vertically center the block.
-    val railMinHeight = cardHeight + OttDimens.CardTitleHeight + innerPad * 2 + if (isTv) 28.dp else 16.dp
+    // Fixed panel height > card+metadata so the row can be truly vertically centered.
+    val verticalInset = if (isTv) 32.dp else 20.dp
+    val railHeight = cardHeight + OttDimens.CardTitleHeight + verticalInset * 2
 
     if (showTitle) {
         ShelfTitle(
@@ -218,7 +218,7 @@ private fun ThematicShelfBody(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = horizontal)
-            .defaultMinSize(minHeight = railMinHeight)
+            .height(railHeight)
             .focusGroup()
             .focusProperties {
                 // Entering this rail from above/below focuses the first card.
@@ -230,7 +230,7 @@ private fun ThematicShelfBody(
         val logoGutter = maxWidth * OttDimens.ThematicCardStartFraction
         val cardStartGap = if (isTv) 16.dp else 10.dp
 
-        // Background panel — rounded; sized to the full rail (including vertical centering space).
+        // Background panel fills the fixed rail height.
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -264,26 +264,30 @@ private fun ThematicShelfBody(
             )
         }
 
-        // Vertically center card + metadata inside the main rail panel.
-        ShelfItemsRow(
-            shelf = shelf,
-            onChannelActivate = onChannelActivate,
-            isTv = isTv,
-            listState = listState,
+        // Card + title/year block centered vertically in the rail.
+        Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .fillMaxWidth()
                 .padding(start = logoGutter),
-            contentPadding = PaddingValues(
-                start = cardStartGap,
-                end = innerPad,
-                top = innerPad,
-                bottom = innerPad + OttDimens.CardTitleHeight,
-            ),
-            fillWidth = true,
-            scrollOnFocus = true,
-            firstItemFocusRequester = firstCardFocus,
-        )
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            ShelfItemsRow(
+                shelf = shelf,
+                onChannelActivate = onChannelActivate,
+                isTv = isTv,
+                listState = listState,
+                contentPadding = PaddingValues(
+                    start = cardStartGap,
+                    end = innerPad,
+                    top = 0.dp,
+                    bottom = 0.dp,
+                ),
+                fillWidth = true,
+                scrollOnFocus = true,
+                firstItemFocusRequester = firstCardFocus,
+            )
+        }
     }
 }
 
