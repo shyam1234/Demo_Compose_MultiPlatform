@@ -18,9 +18,65 @@ class CmsCatalogRemoteDataSource(
     private val logger: OttLogger,
     private val config: CmsConfig = CmsConfig(),
 ) {
+    /**
+     * Device type used for content filtering / image mapping after the last successful menu load.
+     * Updated when menu falls back so rails match the catalog that actually loaded.
+     */
+    var effectiveDeviceType: String = config.menuDeviceType
+        private set
+
+    fun matchesDevice(allowedDevices: List<String>): Boolean =
+        config.deviceTypeOptOut || CmsDeviceType.matches(allowedDevices, effectiveDeviceType)
+
+    /**
+     * Loads the CMS menu for [deviceType], then retries with the platform fallback
+     * ([platformCmsMenuFallbackDeviceType]) when the primary call errors or returns empty.
+     */
     suspend fun fetchMenu(
         deviceType: String = config.menuDeviceType,
         languageCode: String = config.langCode,
+    ): List<AppMenuItem> {
+        val primaryError: Throwable? = try {
+            val primary = fetchMenuOnce(deviceType = deviceType, languageCode = languageCode)
+            if (primary.isNotEmpty()) {
+                effectiveDeviceType = deviceType
+                return primary
+            }
+            null
+        } catch (t: Throwable) {
+            t
+        }
+
+        val fallback = platformCmsMenuFallbackDeviceType()
+        if (CmsDeviceType.sameDevice(fallback, deviceType)) {
+            primaryError?.let { throw it }
+            logger.i(TAG, "No CMS menu for deviceType=$deviceType (fallback equals primary)")
+            return emptyList()
+        }
+
+        if (primaryError != null) {
+            logger.w(
+                TAG,
+                "Menu failed for deviceType=$deviceType (${primaryError.message}); " +
+                    "retrying with fallback=$fallback",
+            )
+        } else {
+            logger.i(
+                TAG,
+                "Menu empty for deviceType=$deviceType; retrying with fallback=$fallback",
+            )
+        }
+
+        val fallbackItems = fetchMenuOnce(deviceType = fallback, languageCode = languageCode)
+        if (fallbackItems.isNotEmpty()) {
+            effectiveDeviceType = fallback
+        }
+        return fallbackItems
+    }
+
+    private suspend fun fetchMenuOnce(
+        deviceType: String,
+        languageCode: String,
     ): List<AppMenuItem> {
         val url = config.menuUrl(deviceType = deviceType, languageCode = languageCode)
         logger.d(TAG, "Fetching CMS menu: $url")
@@ -56,8 +112,8 @@ class CmsCatalogRemoteDataSource(
         val body = authenticatedGetText(url)
         val dto = OttJson.instance.decodeFromString<CmsLayoutResponseDto>(body)
         val layout = CmsCatalogMapper.mapLayout(dto, fallbackLayoutId = layoutId, baseUrl = config.baseUrl)
-        if (!config.matchesDevice(layout.deviceTypes)) {
-            error("CMS layout $layoutId is not available for device ${config.contentDeviceType}")
+        if (!matchesDevice(layout.deviceTypes)) {
+            error("CMS layout $layoutId is not available for device $effectiveDeviceType")
         }
         return layout
     }
@@ -73,11 +129,11 @@ class CmsCatalogRemoteDataSource(
             dto = railDto,
             fallbackRailId = railId,
             baseUrl = config.baseUrl,
-            deviceType = config.contentDeviceType,
+            deviceType = effectiveDeviceType,
             fallbackStreamUrl = config.defaultPlaybackUrl,
         )
-        if (!config.matchesDevice(rail.deviceTypes)) {
-            error("CMS rail $railId is not available for device ${config.contentDeviceType}")
+        if (!matchesDevice(rail.deviceTypes)) {
+            error("CMS rail $railId is not available for device $effectiveDeviceType")
         }
         return rail
     }

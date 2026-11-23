@@ -51,7 +51,6 @@ val coreDataModule = module {
             remote = get(),
             logger = get(),
             local = get(),
-            config = get(),
         )
     } bind CatalogRepository::class
     singleOf(::PersistentWatchlistRepository) bind WatchlistRepository::class

@@ -14,15 +14,25 @@ import android.content.Context
 @SuppressLint("StaticFieldLeak") // Application context only.
 private var androidCmsAppContext: Context? = null
 
+private const val TABLET_SMALLEST_WIDTH_DP = 600
+
 fun installAndroidCmsDeviceTypeContext(context: Context) {
     androidCmsAppContext = context.applicationContext
 }
 
-actual fun platformCmsMenuDeviceType(): String {
-    val sw = androidCmsAppContext
+private fun androidSmallestWidthDp(): Int =
+    androidCmsAppContext
         ?.resources
         ?.configuration
         ?.smallestScreenWidthDp
         ?: 0
-    return if (sw >= 600) CmsDeviceType.ANDROID_TV else CmsDeviceType.ANDROID
-}
+
+private fun isAndroidPhoneFormFactor(): Boolean =
+    androidSmallestWidthDp() < TABLET_SMALLEST_WIDTH_DP
+
+actual fun platformCmsMenuDeviceType(): String =
+    if (isAndroidPhoneFormFactor()) CmsDeviceType.ANDROID else CmsDeviceType.ANDROID_TV
+
+actual fun platformCmsMenuFallbackDeviceType(): String =
+    CmsDeviceType.menuFallbackDeviceType(isPhone = isAndroidPhoneFormFactor())
+

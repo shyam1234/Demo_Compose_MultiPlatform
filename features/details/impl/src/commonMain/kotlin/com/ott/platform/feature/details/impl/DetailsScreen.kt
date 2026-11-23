@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -50,6 +49,8 @@ import com.ott.platform.designsystem.OttColors
 import com.ott.platform.designsystem.OttDimens
 import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.ImageSlot
+import com.ott.platform.ui.components.OttErrorPage
+import com.ott.platform.ui.components.OttLoadingIndicator
 import com.ott.platform.ui.components.RemoteImage
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -67,6 +68,7 @@ fun DetailsRoute(
         state = state,
         onPlay = { state.channel?.let(onPlay) },
         onToggleWatchlist = viewModel::onToggleWatchlist,
+        onRetry = viewModel::load,
         onBack = onBack,
         isTv = isTv,
     )
@@ -79,17 +81,21 @@ fun DetailsScreen(
     onPlay: () -> Unit,
     onToggleWatchlist: () -> Unit,
     onBack: () -> Unit,
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
     isTv: Boolean = false,
 ) {
     val edge = if (isTv) OttDimens.ScreenPadding else OttDimens.PhoneScreenPadding
     when {
         state.isLoading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.testTag("details_loading"))
+            OttLoadingIndicator(modifier = Modifier.testTag("details_loading"))
         }
-        state.error != null -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(state.error ?: "Error", modifier = Modifier.testTag("details_error"))
-        }
+        state.error != null -> OttErrorPage(
+            onRetry = onRetry,
+            compact = !isTv,
+            detail = state.error,
+            modifier = modifier.testTag("details_error"),
+        )
         else -> {
             val channel = state.channel ?: return
             val backdropUrl = remember(channel.id, channel.images, channel.backdropUrl, channel.logoUrl) {

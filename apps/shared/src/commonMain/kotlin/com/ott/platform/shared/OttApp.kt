@@ -3,7 +3,6 @@ package com.ott.platform.shared
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -53,9 +52,11 @@ import com.ott.platform.shared.branding.ActiveCustomerConfig
 import com.ott.platform.shared.branding.LocalActiveCustomer
 import com.ott.platform.shared.branding.ProvideCustomerBrand
 import com.ott.platform.ui.components.OttBottomMenu
+import com.ott.platform.ui.components.OttErrorPage
 import com.ott.platform.ui.components.OttMenuItem
 import com.ott.platform.ui.components.OttPhoneTopBar
 import com.ott.platform.ui.components.OttTopMenu
+import com.ott.platform.ui.components.isServerUnavailableMessage
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -105,8 +106,13 @@ fun OttApp(
             OttRoutes.SEARCH,
             OttRoutes.WATCHLIST,
         )
-        val showTvTopMenu = isTv && onMainTab && tvTopTabs.isNotEmpty()
-        val showPhoneChrome = !isTv && onMainTab
+        val showBootstrapError = currentRoute != null &&
+            currentRoute != OttRoutes.SPLASH &&
+            !menuState.isLoading &&
+            menuState.items.isEmpty() &&
+            menuState.error != null
+        val showTvTopMenu = isTv && onMainTab && tvTopTabs.isNotEmpty() && !showBootstrapError
+        val showPhoneChrome = !isTv && onMainTab && !showBootstrapError
         val showPhoneBottomMenu = showPhoneChrome && phoneBottomTabs.isNotEmpty()
         val isPlayer = currentRoute == OttRoutes.PLAYER
 
@@ -208,7 +214,7 @@ fun OttApp(
                 }
             },
         ) { padding ->
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(OttColors.Background)
@@ -285,6 +291,13 @@ fun OttApp(
                             onBack = { navController.popBackStack() },
                         )
                     }
+                }
+                if (showBootstrapError) {
+                    OttErrorPage(
+                        onRetry = { menuViewModel.refresh() },
+                        compact = !isTv,
+                        detail = menuState.error,
+                    )
                 }
             }
         }

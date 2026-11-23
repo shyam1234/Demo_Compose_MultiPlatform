@@ -12,11 +12,23 @@ object CmsDeviceType {
     const val ANDROID_TV = "androidtv"
     const val ATV_OTT = "atv_ott"
     const val ANDROID = "android"
+    /** Phone menu/content fallback when the primary phone deviceType menu is missing. */
+    const val ANDROID_MOBILE = "androidmobile"
     const val IOS = "ios"
     const val DESKTOP = "desktop"
 
     fun normalize(raw: String?): String =
         raw.orEmpty().trim().lowercase().replace(Regex("[\\s_\\-]+"), "")
+
+    fun sameDevice(a: String, b: String): Boolean =
+        normalize(a) == normalize(b)
+
+    /**
+     * Menu API fallback `devicetype` when the primary request errors / is empty.
+     * Phones → [ANDROID_MOBILE]; TV / tablet / iPad / web / other → [ANDROID_TV].
+     */
+    fun menuFallbackDeviceType(isPhone: Boolean): String =
+        if (isPhone) ANDROID_MOBILE else ANDROID_TV
 
     /**
      * Returns true when [currentDevice] is allowed by CMS [allowedDevices].
@@ -40,6 +52,10 @@ object CmsDeviceType {
             "atvott",
         )
         normalize(WEB), normalize(DESKTOP) -> setOf(normalize(WEB), normalize(DESKTOP))
+        normalize(ANDROID), normalize(ANDROID_MOBILE) -> setOf(
+            normalize(ANDROID),
+            normalize(ANDROID_MOBILE),
+        )
         else -> setOf(normalizedDevice)
     }
 

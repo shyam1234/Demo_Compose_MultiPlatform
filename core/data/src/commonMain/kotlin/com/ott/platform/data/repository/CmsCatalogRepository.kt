@@ -1,7 +1,6 @@
 package com.ott.platform.data.repository
 
 import com.ott.platform.data.cms.CmsCatalogRemoteDataSource
-import com.ott.platform.data.cms.CmsConfig
 import com.ott.platform.data.cms.CmsLayout
 import com.ott.platform.data.cms.CmsRail
 import com.ott.platform.database.CachedLayout
@@ -30,7 +29,6 @@ class CmsCatalogRepository(
     private val remote: CmsCatalogRemoteDataSource,
     private val logger: OttLogger,
     private val local: CatalogLocalDataSource? = null,
-    private val config: CmsConfig = CmsConfig(),
     private val cacheTtlMs: Long = DEFAULT_CACHE_TTL_MS,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : CatalogRepository {
@@ -131,7 +129,7 @@ class CmsCatalogRepository(
                         }.getOrNull()
                     }
                 }.awaitAll().filterNotNull()
-                    .filter { shelf -> config.matchesDevice(shelf.deviceTypes) }
+                    .filter { shelf -> remote.matchesDevice(shelf.deviceTypes) }
                     .filter { shelf -> shelf.items.isNotEmpty() || shelf.isDiscoveryDock }
             }
 
@@ -321,7 +319,7 @@ class CmsCatalogRepository(
     private suspend fun enrichDiscoveryDock(shelf: ContentShelf): ContentShelf {
         if (!shelf.isDiscoveryDock) return shelf
         val tabs = shelf.discoveryDockTabs.mapIndexed { index, tab ->
-            if (!config.matchesDevice(tab.deviceTypes)) return@mapIndexed null
+            if (!remote.matchesDevice(tab.deviceTypes)) return@mapIndexed null
             if (tab.items.isNotEmpty()) {
                 cacheShelfInMemory(tab.id, tab)
                 return@mapIndexed tab
@@ -331,7 +329,7 @@ class CmsCatalogRepository(
             }.onFailure { error ->
                 logger.w(TAG, "Discovery dock tab ${tab.id} failed: ${error.message}")
             }.getOrNull()
-                ?.takeIf { config.matchesDevice(it.deviceTypes) }
+                ?.takeIf { remote.matchesDevice(it.deviceTypes) }
         }.filterNotNull()
         return shelf.copy(discoveryDockTabs = tabs)
     }

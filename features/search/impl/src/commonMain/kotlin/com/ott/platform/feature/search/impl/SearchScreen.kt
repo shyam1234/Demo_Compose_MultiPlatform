@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +21,9 @@ import com.ott.platform.designsystem.OttDimens
 import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.ShelfCardStyle
 import com.ott.platform.ui.components.ChannelCard
+import com.ott.platform.ui.components.OttErrorPage
+import com.ott.platform.ui.components.OttLoadingIndicator
+import com.ott.platform.ui.components.isServerUnavailableMessage
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -34,6 +36,7 @@ fun SearchRoute(
     SearchScreen(
         state = state,
         onQueryChange = viewModel::onQueryChange,
+        onRetry = { viewModel.onQueryChange(state.query) },
         onOpenDetails = onOpenDetails,
         isTv = isTv,
     )
@@ -44,9 +47,19 @@ fun SearchScreen(
     state: SearchUiState,
     onQueryChange: (String) -> Unit,
     onOpenDetails: (Channel) -> Unit,
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
     isTv: Boolean = false,
 ) {
+    if (!state.isLoading && state.results.isEmpty() && isServerUnavailableMessage(state.error)) {
+        OttErrorPage(
+            onRetry = onRetry,
+            compact = !isTv,
+            detail = state.error,
+            modifier = modifier,
+        )
+        return
+    }
     val edge = if (isTv) OttDimens.ScreenPadding else OttDimens.PhoneScreenPadding
     Column(modifier.fillMaxSize().padding(edge)) {
         OutlinedTextField(
@@ -58,7 +71,7 @@ fun SearchScreen(
             placeholder = { Text("The RIP, Sci-Fi, Reacher…") },
         )
         if (state.isLoading) {
-            CircularProgressIndicator(modifier = Modifier.padding(16.dp).testTag("search_loading"))
+            OttLoadingIndicator(modifier = Modifier.padding(16.dp).testTag("search_loading"))
         }
         state.error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
         LazyVerticalGrid(

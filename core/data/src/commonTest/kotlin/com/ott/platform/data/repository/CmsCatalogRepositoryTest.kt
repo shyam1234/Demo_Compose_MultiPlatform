@@ -3,6 +3,8 @@ package com.ott.platform.data.repository
 import com.ott.platform.data.cms.CmsAuthManager
 import com.ott.platform.data.cms.CmsCatalogRemoteDataSource
 import com.ott.platform.data.cms.CmsConfig
+import com.ott.platform.data.cms.CmsDeviceType
+import com.ott.platform.data.cms.platformCmsMenuFallbackDeviceType
 import com.ott.platform.database.CachedLayout
 import com.ott.platform.database.CatalogLocalDataSource
 import com.ott.platform.domain.model.AppMenuItem
@@ -210,7 +212,6 @@ class CmsCatalogRepositoryTest {
             remote = remote,
             logger = noOpLogger,
             local = local,
-            config = config,
             cacheTtlMs = 60_000L,
             nowMs = { currentTimeMs },
         )
@@ -247,7 +248,6 @@ class CmsCatalogRepositoryTest {
             remote = remote,
             logger = noOpLogger,
             local = local,
-            config = config,
             cacheTtlMs = 60_000L,
             nowMs = { currentTimeMs + 5_000L },
         )
@@ -263,7 +263,6 @@ class CmsCatalogRepositoryTest {
             remote = remote,
             logger = noOpLogger,
             local = local,
-            config = config,
             cacheTtlMs = 60_000L,
             nowMs = { currentTimeMs },
         )
@@ -278,6 +277,149 @@ class CmsCatalogRepositoryTest {
         val offlineSearch = offlineRepo.search("Documentary", limit = 10)
         assertIs<OttResult.Success<List<Channel>>>(offlineSearch)
         assertEquals("Muhammad Ali", offlineSearch.data.single().title)
+    }
+
+    @Test
+    fun `retries menu with platform fallback when primary is empty or errors`() = runTest {
+        val primary = "web"
+        val fallback = platformCmsMenuFallbackDeviceType()
+        assertTrue(!CmsDeviceType.sameDevice(primary, fallback))
+
+        val requestedDeviceTypes = mutableListOf<String>()
+        var loginCalls = 0
+        val engine = MockEngine { request ->
+            val url = request.url.toString()
+            when {
+                url.contains("/v1/login") -> {
+                    loginCalls++
+                    respond(
+                        content = """{"refresh":"r","access":"token-1"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+                url.contains("/v1/menu") -> {
+                    val deviceType = request.url.parameters["devicetype"].orEmpty()
+                    requestedDeviceTypes += deviceType
+                    when {
+                        CmsDeviceType.sameDevice(deviceType, primary) &&
+                            requestedDeviceTypes.count { CmsDeviceType.sameDevice(it, primary) } == 1 -> {
+                            // First primary attempt: empty (CMS 207)
+                            respond(
+                                content = """{"message":"Hamberger Menu not found"}""",
+                                status = HttpStatusCode(207, "Multi-Status"),
+                                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                            )
+                        }
+                        CmsDeviceType.sameDevice(deviceType, fallback) -> {
+                            respond(
+                                content = """
+                                    {
+                                      "count": 1,
+                                      "results": [
+                                        {
+                                          "_id": "grp1",
+                                          "publish_now": 1,
+                                          "menuL1": [
+                                            {
+                                              "menuL1Id": "tv_home",
+                                              "menuL1Title": "Fallback Home",
+                                              "menuL1DeeplinkUrl": "layout_home"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                """.trimIndent(),
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                            )
+                        }
+                        else -> {
+                            // Second scenario below uses an error for primary.
+                            respond(
+                                content = """{"detail":"boom"}""",
+                                status = HttpStatusCode.InternalServerError,
+                                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                            )
+                        }
+                    }
+                }
+                else -> error("Unexpected URL: $url")
+            }
+        }
+
+        val config = CmsConfig(menuDeviceType = primary, contentDeviceType = primary)
+        val client = mockHttpClient(engine)
+        val auth = CmsAuthManager(client, noOpLogger, config)
+        val remote = CmsCatalogRemoteDataSource(client, auth, noOpLogger, config)
+        val repo = CmsCatalogRepository(remote = remote, logger = noOpLogger)
+
+        val emptyThenFallback = repo.getMenu()
+        assertIs<OttResult.Success<List<AppMenuItem>>>(emptyThenFallback)
+        assertEquals(listOf("Fallback Home"), emptyThenFallback.data.map { it.title })
+        assertEquals(fallback, remote.effectiveDeviceType)
+        assertEquals(listOf(primary, fallback), requestedDeviceTypes)
+
+        // Error path: new remote so primary fails hard, then fallback succeeds.
+        requestedDeviceTypes.clear()
+        val errorEngine = MockEngine { request ->
+            val url = request.url.toString()
+            when {
+                url.contains("/v1/login") -> {
+                    respond(
+                        content = """{"refresh":"r","access":"token-1"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+                url.contains("/v1/menu") -> {
+                    val deviceType = request.url.parameters["devicetype"].orEmpty()
+                    requestedDeviceTypes += deviceType
+                    if (CmsDeviceType.sameDevice(deviceType, primary)) {
+                        respond(
+                            content = """{"detail":"boom"}""",
+                            status = HttpStatusCode.InternalServerError,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    } else {
+                        respond(
+                            content = """
+                                {
+                                  "count": 1,
+                                  "results": [
+                                    {
+                                      "_id": "grp1",
+                                      "publish_now": 1,
+                                      "menuL1": [
+                                        {
+                                          "menuL1Id": "tv_home",
+                                          "menuL1Title": "Error Fallback Home",
+                                          "menuL1DeeplinkUrl": "layout_home"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                            """.trimIndent(),
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    }
+                }
+                else -> error("Unexpected URL: $url")
+            }
+        }
+        val errorClient = mockHttpClient(errorEngine)
+        val errorAuth = CmsAuthManager(errorClient, noOpLogger, config)
+        val errorRemote = CmsCatalogRemoteDataSource(errorClient, errorAuth, noOpLogger, config)
+        val errorRepo = CmsCatalogRepository(remote = errorRemote, logger = noOpLogger)
+        val errorThenFallback = errorRepo.getMenu()
+        assertIs<OttResult.Success<List<AppMenuItem>>>(errorThenFallback)
+        assertEquals(listOf("Error Fallback Home"), errorThenFallback.data.map { it.title })
+        assertEquals(fallback, errorRemote.effectiveDeviceType)
+        assertEquals(listOf(primary, fallback), requestedDeviceTypes)
+        assertTrue(loginCalls >= 1)
     }
 
     private fun mockHttpClient(engine: MockEngine): HttpClient = HttpClient(engine) {

@@ -11,4 +11,7 @@ object OttJson {
     }
 }
 
+/** Shared API timeout (connect / request / socket) for every platform. */
+const val OTT_API_TIMEOUT_MS: Long = 10_000L
+
 expect fun createOttHttpClient(): HttpClient

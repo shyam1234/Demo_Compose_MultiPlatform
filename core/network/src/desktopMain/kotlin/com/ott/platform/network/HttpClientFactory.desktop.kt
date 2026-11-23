@@ -12,9 +12,9 @@ import io.ktor.serialization.kotlinx.json.json
 actual fun createOttHttpClient(): HttpClient = HttpClient(CIO) {
     install(ContentNegotiation) { json(OttJson.instance) }
     install(HttpTimeout) {
-        requestTimeoutMillis = 60_000
-        connectTimeoutMillis = 20_000
-        socketTimeoutMillis = 60_000
+        requestTimeoutMillis = OTT_API_TIMEOUT_MS
+        connectTimeoutMillis = OTT_API_TIMEOUT_MS
+        socketTimeoutMillis = OTT_API_TIMEOUT_MS
     }
     install(Logging) {
         logger = object : Logger {

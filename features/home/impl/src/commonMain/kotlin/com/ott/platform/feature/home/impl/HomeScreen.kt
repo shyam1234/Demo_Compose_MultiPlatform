@@ -3,7 +3,6 @@ package com.ott.platform.feature.home.impl
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,10 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,8 +33,11 @@ import com.ott.platform.domain.model.Channel
 import com.ott.platform.ui.components.ContentShelfRow
 import com.ott.platform.ui.components.FocusablePillButton
 import com.ott.platform.ui.components.HeroBannerCarousel
+import com.ott.platform.ui.components.OttErrorPage
+import com.ott.platform.ui.components.OttLoadingIndicator
 import com.ott.platform.ui.components.PillStyle
 import com.ott.platform.ui.components.RemoteImage
+import com.ott.platform.ui.components.isServerUnavailableMessage
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -89,31 +89,16 @@ fun HomeScreen(
                     .background(OttColors.Background),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(
-                    color = OttColors.Accent,
-                    modifier = Modifier.testTag("home_loading"),
-                )
+                OttLoadingIndicator(modifier = Modifier.testTag("home_loading"))
             }
         }
         state.error != null && state.feed == null -> {
-            Box(
-                modifier
-                    .fillMaxSize()
-                    .background(OttColors.Background)
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = state.error ?: "Unable to load catalog",
-                        color = OttColors.OnSurfaceMuted,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    TextButton(onClick = onRetry, modifier = Modifier.testTag("home_retry")) {
-                        Text("Retry", color = OttColors.AccentSoft)
-                    }
-                }
-            }
+            OttErrorPage(
+                onRetry = onRetry,
+                compact = !isTv,
+                detail = state.error.takeIf { isServerUnavailableMessage(it) || it.isNotBlank() },
+                modifier = modifier.testTag("home_retry"),
+            )
         }
         else -> {
             val feed = state.feed ?: return
