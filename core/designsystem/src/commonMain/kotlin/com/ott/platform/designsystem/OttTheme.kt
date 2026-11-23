@@ -57,6 +57,16 @@ object OttDimens {
     val FocusBorder = 4.dp
     val RowGap = 20.dp
     val PhoneRowGap = 12.dp
+    /**
+     * Left inset for thematic / branded rails so CMS `rail_background_image`
+     * logo artwork stays fully visible; cards start after this gutter.
+     */
+    val ThematicLogoGutter = 240.dp
+    val PhoneThematicLogoGutter = 148.dp
+    val ThematicRailCorner = 20.dp
+    val PhoneThematicRailCorner = 16.dp
+    val ThematicRailInnerPadding = 22.dp
+    val PhoneThematicRailInnerPadding = 14.dp
 }
 
 private val OttDarkColors = darkColorScheme(

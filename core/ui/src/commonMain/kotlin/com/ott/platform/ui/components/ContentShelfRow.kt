@@ -1,19 +1,23 @@
 package com.ott.platform.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,10 +25,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -38,6 +47,7 @@ import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.ContentShelf
 import com.ott.platform.domain.model.RailContentType
 import com.ott.platform.domain.model.ShelfCardStyle
+import kotlinx.coroutines.launch
 
 @Composable
 fun ContentShelfRow(
@@ -137,6 +147,7 @@ private fun DiscoveryDockShelf(
                     shelf = activeTab,
                     onChannelActivate = onChannelActivate,
                     isTv = isTv,
+                    scrollOnFocus = isTv,
                 )
             }
         }
@@ -164,6 +175,13 @@ private fun ThematicShelf(
     }
 }
 
+/**
+ * Thematic / branded rail matching the discovery-dock design:
+ * - CMS background (logo) pinned to the left, fully visible
+ * - Cards start after a left gutter so they never cover the logo at rest
+ * - Focus lands on the first card; horizontal scroll keeps cards fully on-screen
+ * - No outer clip on the card row (focus ring + titles must not be cut)
+ */
 @Composable
 private fun ThematicShelfBody(
     shelf: ContentShelf,
@@ -172,7 +190,12 @@ private fun ThematicShelfBody(
     showTitle: Boolean,
 ) {
     val horizontal = if (isTv) OttDimens.ScreenPadding else OttDimens.PhoneScreenPadding
-    val containerShape = RoundedCornerShape(if (isTv) 20.dp else 16.dp)
+    val logoGutter = if (isTv) OttDimens.ThematicLogoGutter else OttDimens.PhoneThematicLogoGutter
+    val innerPad = if (isTv) OttDimens.ThematicRailInnerPadding else OttDimens.PhoneThematicRailInnerPadding
+    val corner = if (isTv) OttDimens.ThematicRailCorner else OttDimens.PhoneThematicRailCorner
+    val containerShape = RoundedCornerShape(corner)
+    val firstCardFocus = remember(shelf.id) { FocusRequester() }
+    val listState = rememberLazyListState()
 
     if (showTitle) {
         ShelfTitle(
@@ -181,47 +204,72 @@ private fun ThematicShelfBody(
             horizontal = horizontal,
             accent = true,
         )
+        Spacer(Modifier.height(if (isTv) 10.dp else 6.dp))
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = horizontal)
-            .clip(containerShape)
-            // Visible thematic panel even when CMS background artwork fails (e.g. 502).
-            .background(OttColors.Accent.copy(alpha = 0.22f))
+            .focusGroup()
+            .focusProperties {
+                // Entering this rail from above/below focuses the first card.
+                onEnter = { firstCardFocus.requestFocus() }
+            }
             .testTag("thematic_container_${shelf.id}"),
     ) {
-        if (!shelf.backgroundImageUrl.isNullOrBlank()) {
-            RemoteImage(
-                url = shelf.backgroundImageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-            )
+        // Background panel only — clipped so card focus rings / titles are not cut.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(containerShape)
+                .background(Color(0xFF0B2748).copy(alpha = 0.92f)),
+        ) {
+            if (!shelf.backgroundImageUrl.isNullOrBlank()) {
+                RemoteImage(
+                    url = shelf.backgroundImageUrl,
+                    contentDescription = null,
+                    // Keep the left-side brand logo; crop from the right if needed.
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.CenterStart,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            // Soften only the card region so the logo stays crisp on the left.
             Box(
                 modifier = Modifier
-                    .matchParentSize()
+                    .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(
-                            listOf(
-                                Color(0xCC0B2748),
-                                Color(0x99081C36),
-                                Color(0x66050F1E),
+                            colorStops = arrayOf(
+                                0.0f to Color.Transparent,
+                                0.22f to Color.Transparent,
+                                0.38f to Color(0x33081C36),
+                                0.55f to Color(0x66050F1E),
+                                1.0f to Color(0x99050F1E),
                             ),
                         ),
                     ),
             )
         }
+
+        // Cards are laid out in the region after the logo gutter so scrolling never covers the brand.
         ShelfItemsRow(
             shelf = shelf,
             onChannelActivate = onChannelActivate,
             isTv = isTv,
+            listState = listState,
+            modifier = Modifier.padding(start = logoGutter),
             contentPadding = PaddingValues(
-                horizontal = if (isTv) 20.dp else 14.dp,
-                vertical = if (isTv) 20.dp else 14.dp,
+                start = if (isTv) 12.dp else 8.dp,
+                end = innerPad,
+                top = innerPad,
+                // Extra bottom so title + subtitle under the card are not clipped by the next shelf.
+                bottom = innerPad + OttDimens.CardTitleHeight,
             ),
             fillWidth = true,
+            scrollOnFocus = true,
+            firstItemFocusRequester = firstCardFocus,
         )
     }
 }
@@ -276,6 +324,7 @@ private fun StandardShelf(
             shelf = shelf,
             onChannelActivate = onChannelActivate,
             isTv = isTv,
+            scrollOnFocus = isTv,
         )
     }
 }
@@ -301,8 +350,12 @@ private fun ShelfItemsRow(
     shelf: ContentShelf,
     onChannelActivate: (Channel) -> Unit,
     isTv: Boolean,
+    modifier: Modifier = Modifier,
     contentPadding: PaddingValues? = null,
     fillWidth: Boolean = true,
+    scrollOnFocus: Boolean = false,
+    listState: LazyListState = rememberLazyListState(),
+    firstItemFocusRequester: FocusRequester? = null,
 ) {
     val horizontal = if (isTv) OttDimens.ScreenPadding else OttDimens.PhoneScreenPadding
     val gap = when (shelf.cardStyle) {
@@ -313,13 +366,17 @@ private fun ShelfItemsRow(
     }
     val padding = contentPadding ?: PaddingValues(
         horizontal = horizontal,
-        vertical = if (isTv) 16.dp else 8.dp,
+        // Leave headroom so focus ring + title/subtitle are not clipped by neighbors.
+        vertical = if (isTv) 18.dp else 10.dp,
     )
+    val scope = rememberCoroutineScope()
+    val rowModifier = modifier
+        .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
+        .focusGroup()
 
     if (shelf.items.isEmpty()) {
         Box(
-            modifier = Modifier
-                .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
+            modifier = rowModifier
                 .padding(padding)
                 .height(if (isTv) 48.dp else 36.dp),
             contentAlignment = Alignment.CenterStart,
@@ -333,16 +390,34 @@ private fun ShelfItemsRow(
         return
     }
 
+    fun onCardFocused(index: Int) {
+        if (!scrollOnFocus) return
+        scope.launch {
+            // Keep the focused card fully inside the viewport (no cut-off on left/right).
+            val visible = listState.layoutInfo.visibleItemsInfo
+            val alreadyFullyVisible = visible.any { info ->
+                info.index == index &&
+                    info.offset >= listState.layoutInfo.viewportStartOffset &&
+                    info.offset + info.size <= listState.layoutInfo.viewportEndOffset
+            }
+            if (!alreadyFullyVisible) {
+                listState.animateScrollToItem(index)
+            }
+        }
+    }
+
     if (shelf.contentType == RailContentType.Grid && shelf.items.size >= 4) {
         val columns = remember(shelf.items) { shelf.items.chunked(2) }
         LazyRow(
-            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+            state = listState,
+            modifier = rowModifier,
             contentPadding = padding,
             horizontalArrangement = Arrangement.spacedBy(gap),
         ) {
-            itemsIndexed(columns, key = { idx, col -> "${shelf.id}_col_${idx}_${col.first().id.value}" }) { _, columnItems ->
+            itemsIndexed(columns, key = { idx, col -> "${shelf.id}_col_${idx}_${col.first().id.value}" }) { colIndex, columnItems ->
                 Column(verticalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 12.dp)) {
-                    columnItems.forEach { channel ->
+                    columnItems.forEachIndexed { rowIndex, channel ->
+                        val isFirst = colIndex == 0 && rowIndex == 0
                         ChannelCard(
                             channel = channel,
                             onClick = { onChannelActivate(channel) },
@@ -350,6 +425,17 @@ private fun ShelfItemsRow(
                             contentType = shelf.contentType,
                             rawDisplayType = shelf.rawDisplayType,
                             isTv = isTv,
+                            modifier = Modifier
+                                .then(
+                                    if (isFirst && firstItemFocusRequester != null) {
+                                        Modifier.focusRequester(firstItemFocusRequester)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .onFocusChanged { state ->
+                                    if (state.isFocused) onCardFocused(colIndex)
+                                },
                         )
                     }
                 }
@@ -357,7 +443,8 @@ private fun ShelfItemsRow(
         }
     } else {
         LazyRow(
-            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+            state = listState,
+            modifier = rowModifier,
             contentPadding = padding,
             horizontalArrangement = Arrangement.spacedBy(gap),
         ) {
@@ -370,6 +457,17 @@ private fun ShelfItemsRow(
                     rawDisplayType = shelf.rawDisplayType,
                     rank = if (shelf.contentType == RailContentType.Top10) index + 1 else null,
                     isTv = isTv,
+                    modifier = Modifier
+                        .then(
+                            if (index == 0 && firstItemFocusRequester != null) {
+                                Modifier.focusRequester(firstItemFocusRequester)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .onFocusChanged { state ->
+                            if (state.isFocused) onCardFocused(index)
+                        },
                 )
             }
         }

@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -115,6 +116,12 @@ fun ChannelCard(
         modifier = modifier
             .width(width)
             .onFocusChanged { hasFocus = it.isFocused }
+            .graphicsLayer {
+                // Subtle leanback lift — parent rails must not clip this.
+                val scale = if (isTv && isFocused) 1.05f else 1f
+                scaleX = scale
+                scaleY = scale
+            }
             .clickable(
                 interactionSource = interaction,
                 indication = null,

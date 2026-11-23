@@ -62,14 +62,19 @@ object CmsCatalogMapper {
         return candidate.takeIf { it.isNotBlank() }
     }
 
+    /**
+     * Maps the CMS Menu API payload as-is.
+     *
+     * Device scoping is owned by `GET /v1/menu?devicetype=…` — this mapper does **not**
+     * re-filter groups client-side. Only unpublished groups (`publish_now == 0`) are skipped.
+     * Titles, icons, deeplinks, and L2 children come exclusively from the response.
+     */
     fun mapMenu(
         response: CmsMenuResponseDto,
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
-        deviceType: String = platformCmsMenuDeviceType(),
+        @Suppress("UNUSED_PARAMETER") deviceType: String = platformCmsMenuDeviceType(),
     ): List<AppMenuItem> {
-        val groups = response.results
-            .filter { it.publishNow != 0 }
-            .filter { CmsDeviceType.matches(it.deviceType, deviceType) }
+        val groups = response.results.filter { it.publishNow != 0 }
         return groups.flatMap { group ->
             group.menuL1.mapNotNull { l1 ->
                 val title = l1.menuL1Title.trim()
@@ -88,13 +93,14 @@ object CmsCatalogMapper {
                         selectedIconUrl = normalizeAssetUrl(l2.selectedImageIcon, baseUrl),
                     )
                 }
+                // Prefer the L1 deeplink; fall back to the menu-group deeplink only when L1 is blank.
                 val layoutId = extractLayoutId(l1.menuL1DeeplinkUrl)
                     ?: extractLayoutId(group.menuGroupDeeplinkUrl)
                 AppMenuItem(
                     id = l1.menuL1Id.ifBlank { title.lowercase().replace(" ", "_") },
                     title = title,
                     layoutId = layoutId,
-                    deeplinkUrl = l1.menuL1DeeplinkUrl,
+                    deeplinkUrl = l1.menuL1DeeplinkUrl.ifBlank { group.menuGroupDeeplinkUrl },
                     deeplinkType = l1.deeplinkType,
                     defaultIconUrl = normalizeAssetUrl(l1.defaultImageIcon, baseUrl),
                     focusedIconUrl = normalizeAssetUrl(l1.focusedImageIcon, baseUrl),

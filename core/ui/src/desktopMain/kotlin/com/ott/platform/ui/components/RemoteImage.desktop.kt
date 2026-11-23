@@ -16,10 +16,11 @@ actual fun RemoteImage(
     contentDescription: String?,
     modifier: Modifier,
     contentScale: ContentScale,
+    alignment: Alignment,
 ) {
     Box(
         modifier = modifier.background(OttColors.SurfaceElevated),
-        contentAlignment = Alignment.Center,
+        contentAlignment = alignment,
     ) {
         Text(
             text = contentDescription?.take(1)?.uppercase().orEmpty().ifBlank { "·" },

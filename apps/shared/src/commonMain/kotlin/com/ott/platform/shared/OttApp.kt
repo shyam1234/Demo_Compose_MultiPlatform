@@ -294,9 +294,8 @@ fun OttApp(
 }
 
 /**
- * Maps CMS menu L1 items to app routes.
- * Utility destinations (Search / Library) appear only when CMS defines them.
- * Layout tabs require a CMS layout deeplink — nothing is invented client-side.
+ * Maps Menu API `menuL1` items → nav tabs.
+ * Labels / icons / layout ids come only from the API — no client-invented tabs.
  */
 private fun buildCmsNavItems(items: List<AppMenuItem>): List<OttMenuItem> {
     if (items.isEmpty()) return emptyList()
@@ -308,7 +307,7 @@ private fun buildCmsNavItems(items: List<AppMenuItem>): List<OttMenuItem> {
         }
         OttMenuItem(
             id = routeId,
-            label = item.title,
+            label = item.title, // exact CMS menuL1Title
             iconUrl = item.defaultIconUrl,
             selectedIconUrl = item.selectedIconUrl,
             focusedIconUrl = item.focusedIconUrl,
@@ -318,17 +317,25 @@ private fun buildCmsNavItems(items: List<AppMenuItem>): List<OttMenuItem> {
     }
 }
 
+/**
+ * Resolves an in-app route from a CMS menu item.
+ * Utility screens only when the CMS title (or deeplink_type) explicitly names them;
+ * otherwise require a layout deeplink from the Menu API.
+ */
 private fun resolveCmsMenuRoute(item: AppMenuItem, preferHome: Boolean): String? {
-    val haystack = listOf(item.title, item.deeplinkUrl, item.deeplinkType, item.id)
-        .joinToString(" ")
-        .lowercase()
-    when {
-        "search" in haystack -> return OttRoutes.SEARCH
-        listOf("watchlist", "library", "my list", "mylist", "favorites").any { it in haystack } ->
-            return OttRoutes.WATCHLIST
+    val titleKey = item.title.trim().lowercase().replace(Regex("[\\s_\\-]+"), "")
+    val typeKey = item.deeplinkType.trim().lowercase().replace(Regex("[\\s_\\-]+"), "")
+    when (titleKey) {
+        "search" -> return OttRoutes.SEARCH
+        "watchlist", "library", "mylist", "favorites", "favourites" -> return OttRoutes.WATCHLIST
+    }
+    when (typeKey) {
+        "search" -> return OttRoutes.SEARCH
+        "watchlist", "library", "mylist" -> return OttRoutes.WATCHLIST
     }
     val layoutId = item.layoutId
     if (layoutId.isNullOrBlank()) return null
+    // First layout tab hosts the app start destination; label still comes from CMS.
     return if (preferHome) OttRoutes.HOME else OttRoutes.layout(layoutId)
 }
 

@@ -389,36 +389,38 @@ class CmsCatalogMapperTest {
     }
 
     @Test
-    fun `filters menu groups and rails by CMS device type`() {
+    fun `mapMenu trusts Menu API payload and skips unpublished groups only`() {
         val menuJson = """
             {
               "count": 2,
               "results": [
                 {
-                  "_id": "web_only",
+                  "_id": "web_nav",
                   "publish_now": 1,
                   "devicetype": ["web"],
                   "menuGroupDeeplinkUrl": "http://layouts/web_home",
                   "menuL1": [
-                    { "menuL1Id": "home", "menuL1Title": "HOME", "menuL1DeeplinkUrl": "web_home" }
+                    { "menuL1Id": "home", "menuL1Title": "HOME", "menuL1DeeplinkUrl": "6af4302c6368a4cce6863ca6" },
+                    { "menuL1Id": "movies", "menuL1Title": "MOVIES", "menuL1DeeplinkUrl": "6af4245f6368a4cce6863c73" },
+                    { "menuL1Id": "shows", "menuL1Title": "TV SHOWS", "menuL1DeeplinkUrl": "6afe8ede2bbe7c443f8803c4" }
                   ]
                 },
                 {
-                  "_id": "tv_only",
-                  "publish_now": 1,
-                  "devicetype": ["androidtv", "atv_ott"],
+                  "_id": "hidden",
+                  "publish_now": 0,
                   "menuL1": [
-                    { "menuL1Id": "tv", "menuL1Title": "TV Home", "menuL1DeeplinkUrl": "tv_home" }
+                    { "menuL1Id": "x", "menuL1Title": "Hidden", "menuL1DeeplinkUrl": "x" }
                   ]
                 }
               ]
             }
         """.trimIndent()
         val menuDto = OttJson.instance.decodeFromString<CmsMenuResponseDto>(menuJson)
-        val webMenu = CmsCatalogMapper.mapMenu(menuDto, deviceType = "web")
-        assertEquals(listOf("HOME"), webMenu.map { it.title })
-        val tvMenu = CmsCatalogMapper.mapMenu(menuDto, deviceType = "androidtv")
-        assertEquals(listOf("TV Home"), tvMenu.map { it.title })
+        val menu = CmsCatalogMapper.mapMenu(menuDto, deviceType = "web")
+        assertEquals(listOf("HOME", "MOVIES", "TV SHOWS"), menu.map { it.title })
+        assertEquals("6af4302c6368a4cce6863ca6", menu[0].layoutId)
+        assertEquals("6af4245f6368a4cce6863c73", menu[1].layoutId)
+        assertEquals("6afe8ede2bbe7c443f8803c4", menu[2].layoutId)
 
         assertTrue(CmsDeviceType.matches(listOf("web"), "web"))
         assertTrue(!CmsDeviceType.matches(listOf("androidtv", "atv_ott"), "web"))

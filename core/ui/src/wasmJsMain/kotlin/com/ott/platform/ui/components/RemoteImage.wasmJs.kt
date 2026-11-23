@@ -17,6 +17,7 @@ actual fun RemoteImage(
     contentDescription: String?,
     modifier: Modifier,
     contentScale: ContentScale,
+    alignment: Alignment,
 ) {
     if (url.isNullOrBlank()) {
         Placeholder(contentDescription, modifier)
@@ -27,6 +28,7 @@ actual fun RemoteImage(
         contentDescription = contentDescription,
         modifier = modifier.background(OttColors.SurfaceElevated),
         contentScale = contentScale,
+        alignment = alignment,
     )
 }
 
