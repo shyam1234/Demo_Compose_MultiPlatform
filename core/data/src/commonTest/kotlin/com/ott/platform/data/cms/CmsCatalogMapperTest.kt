@@ -269,7 +269,7 @@ class CmsCatalogMapperTest {
 
         assertTrue(rail.hasBackgroundImage)
         assertEquals(
-            "https://cms.play-cms.com/mount/images/rail-bg.png",
+            "https://cms.play-cms.com/v1/imageresize/w_1920/h_400/original/%2Fmount%2Fimages%2Frail-bg.png",
             rail.backgroundImageUrl,
         )
         assertTrue(shelf.isThematic)

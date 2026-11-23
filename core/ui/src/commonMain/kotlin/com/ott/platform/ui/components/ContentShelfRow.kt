@@ -4,15 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -178,9 +178,9 @@ private fun ThematicShelf(
 /**
  * Thematic / branded rail matching the discovery-dock design:
  * - CMS background (logo) pinned to the left, fully visible
- * - Cards start after a left gutter so they never cover the logo at rest
- * - Focus lands on the first card; horizontal scroll keeps cards fully on-screen
- * - No outer clip on the card row (focus ring + titles must not be cut)
+ * - Cards start at 40% of the rail width so they never cover the logo at rest
+ * - Card + metadata vertically centered in the main rail panel
+ * - Focus lands on the first card; scroll keeps cards fully on-screen
  */
 @Composable
 private fun ThematicShelfBody(
@@ -190,12 +190,19 @@ private fun ThematicShelfBody(
     showTitle: Boolean,
 ) {
     val horizontal = if (isTv) OttDimens.ScreenPadding else OttDimens.PhoneScreenPadding
-    val logoGutter = if (isTv) OttDimens.ThematicLogoGutter else OttDimens.PhoneThematicLogoGutter
     val innerPad = if (isTv) OttDimens.ThematicRailInnerPadding else OttDimens.PhoneThematicRailInnerPadding
     val corner = if (isTv) OttDimens.ThematicRailCorner else OttDimens.PhoneThematicRailCorner
     val containerShape = RoundedCornerShape(corner)
     val firstCardFocus = remember(shelf.id) { FocusRequester() }
     val listState = rememberLazyListState()
+    val cardHeight = when (shelf.cardStyle) {
+        ShelfCardStyle.Portrait -> if (isTv) OttDimens.TvPortraitCardHeight else OttDimens.PortraitCardHeight
+        ShelfCardStyle.Square -> if (isTv) OttDimens.TvSquareCardSize else OttDimens.SquareCardSize
+        ShelfCardStyle.Banner -> if (isTv) OttDimens.TvBannerCardHeight else OttDimens.BannerCardHeight
+        ShelfCardStyle.Landscape -> if (isTv) OttDimens.TvCardHeight else OttDimens.CardHeight
+    }
+    // Panel tall enough for poster + title/year, with room to vertically center the block.
+    val railMinHeight = cardHeight + OttDimens.CardTitleHeight + innerPad * 2 + if (isTv) 28.dp else 16.dp
 
     if (showTitle) {
         ShelfTitle(
@@ -207,10 +214,11 @@ private fun ThematicShelfBody(
         Spacer(Modifier.height(if (isTv) 10.dp else 6.dp))
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = horizontal)
+            .defaultMinSize(minHeight = railMinHeight)
             .focusGroup()
             .focusProperties {
                 // Entering this rail from above/below focuses the first card.
@@ -218,7 +226,11 @@ private fun ThematicShelfBody(
             }
             .testTag("thematic_container_${shelf.id}"),
     ) {
-        // Background panel only — clipped so card focus rings / titles are not cut.
+        // 40% of the full rail width reserved for CMS brand / logo artwork.
+        val logoGutter = maxWidth * OttDimens.ThematicCardStartFraction
+        val cardStartGap = if (isTv) 16.dp else 10.dp
+
+        // Background panel — rounded; sized to the full rail (including vertical centering space).
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -229,13 +241,12 @@ private fun ThematicShelfBody(
                 RemoteImage(
                     url = shelf.backgroundImageUrl,
                     contentDescription = null,
-                    // Keep the left-side brand logo; crop from the right if needed.
                     contentScale = ContentScale.Crop,
                     alignment = Alignment.CenterStart,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            // Soften only the card region so the logo stays crisp on the left.
+            // Keep left brand zone clear; darken only from the card start (~40%) onward.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -243,28 +254,30 @@ private fun ThematicShelfBody(
                         Brush.horizontalGradient(
                             colorStops = arrayOf(
                                 0.0f to Color.Transparent,
-                                0.22f to Color.Transparent,
-                                0.38f to Color(0x33081C36),
-                                0.55f to Color(0x66050F1E),
-                                1.0f to Color(0x99050F1E),
+                                OttDimens.ThematicCardStartFraction to Color.Transparent,
+                                0.52f to Color(0x18081C36),
+                                0.70f to Color(0x44050F1E),
+                                1.0f to Color(0x77050F1E),
                             ),
                         ),
                     ),
             )
         }
 
-        // Cards are laid out in the region after the logo gutter so scrolling never covers the brand.
+        // Vertically center card + metadata inside the main rail panel.
         ShelfItemsRow(
             shelf = shelf,
             onChannelActivate = onChannelActivate,
             isTv = isTv,
             listState = listState,
-            modifier = Modifier.padding(start = logoGutter),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .fillMaxWidth()
+                .padding(start = logoGutter),
             contentPadding = PaddingValues(
-                start = if (isTv) 12.dp else 8.dp,
+                start = cardStartGap,
                 end = innerPad,
                 top = innerPad,
-                // Extra bottom so title + subtitle under the card are not clipped by the next shelf.
                 bottom = innerPad + OttDimens.CardTitleHeight,
             ),
             fillWidth = true,
@@ -287,39 +300,13 @@ private fun StandardShelf(
             .fillMaxWidth()
             .testTag("shelf_${shelf.id}"),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = horizontal),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = shelf.title,
-                style = if (isTv) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleMedium,
-                color = OttColors.OnSurface,
-                fontWeight = FontWeight.SemiBold,
-            )
-            val badge = when (shelf.contentType) {
-                RailContentType.Top10 -> "TOP 10"
-                RailContentType.New -> "NEW"
-                RailContentType.Editorial -> "SPOTLIGHT"
-                RailContentType.Grid -> "${shelf.items.size} TITLES"
-                else -> null
-            }
-            if (badge != null) {
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = OttColors.AccentSoft,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(OttColors.SurfaceElevated)
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                )
-            }
-        }
+        Text(
+            text = shelf.title,
+            style = if (isTv) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleMedium,
+            color = OttColors.OnSurface,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = horizontal),
+        )
         ShelfItemsRow(
             shelf = shelf,
             onChannelActivate = onChannelActivate,
@@ -365,9 +352,11 @@ private fun ShelfItemsRow(
         ShelfCardStyle.Landscape -> if (isTv) OttDimens.RowGap else OttDimens.PhoneRowGap
     }
     val padding = contentPadding ?: PaddingValues(
-        horizontal = horizontal,
-        // Leave headroom so focus ring + title/subtitle are not clipped by neighbors.
-        vertical = if (isTv) 18.dp else 10.dp,
+        start = horizontal,
+        end = horizontal,
+        // Extra bottom room so title/subtitle + focus ring aren't clipped by the next shelf.
+        top = if (isTv) 16.dp else 8.dp,
+        bottom = if (isTv) 28.dp else 16.dp,
     )
     val scope = rememberCoroutineScope()
     val rowModifier = modifier
@@ -393,14 +382,13 @@ private fun ShelfItemsRow(
     fun onCardFocused(index: Int) {
         if (!scrollOnFocus) return
         scope.launch {
-            // Keep the focused card fully inside the viewport (no cut-off on left/right).
-            val visible = listState.layoutInfo.visibleItemsInfo
-            val alreadyFullyVisible = visible.any { info ->
-                info.index == index &&
-                    info.offset >= listState.layoutInfo.viewportStartOffset &&
-                    info.offset + info.size <= listState.layoutInfo.viewportEndOffset
-            }
-            if (!alreadyFullyVisible) {
+            // Keep the focused card fully inside the horizontal viewport (first & last inclusive).
+            val info = listState.layoutInfo
+            val item = info.visibleItemsInfo.firstOrNull { it.index == index }
+            val fullyVisible = item != null &&
+                item.offset >= info.viewportStartOffset &&
+                item.offset + item.size <= info.viewportEndOffset
+            if (!fullyVisible) {
                 listState.animateScrollToItem(index)
             }
         }

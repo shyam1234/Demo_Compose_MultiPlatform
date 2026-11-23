@@ -352,10 +352,10 @@ private class WebCatalogLocalDataSource : CatalogLocalDataSource {
     }
 
     private companion object {
-        const val KEY_MENU = "ott_web_cms_menu_v4"
-        const val KEY_LAYOUTS = "ott_web_cms_layouts_v4"
-        const val KEY_CATEGORIES = "ott_web_cms_categories_v4"
-        const val KEY_SHELVES = "ott_web_cms_shelves_v4"
+        const val KEY_MENU = "ott_web_cms_menu_v6"
+        const val KEY_LAYOUTS = "ott_web_cms_layouts_v6"
+        const val KEY_CATEGORIES = "ott_web_cms_categories_v6"
+        const val KEY_SHELVES = "ott_web_cms_shelves_v6"
     }
 }
 

@@ -37,7 +37,8 @@
         "menuDeviceType": null,
         "deviceTypeOptOut": true,
         "deviceTypeOverride": null,
-        "fallbackLayoutId": "6af4302c6368a4cce6863ca6"
+        "fallbackLayoutId": "6af4302c6368a4cce6863ca6",
+        "defaultPlaybackUrl": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
       },
       "features": {
         "search": true,
@@ -88,7 +89,8 @@
         "menuDeviceType": "web",
         "deviceTypeOptOut": false,
         "deviceTypeOverride": "web",
-        "fallbackLayoutId": "6af4302c6368a4cce6863ca6"
+        "fallbackLayoutId": "6af4302c6368a4cce6863ca6",
+        "defaultPlaybackUrl": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
       },
       "features": {
         "search": false,
@@ -139,7 +141,8 @@
         "menuDeviceType": null,
         "deviceTypeOptOut": true,
         "deviceTypeOverride": null,
-        "fallbackLayoutId": "6af4302c6368a4cce6863ca6"
+        "fallbackLayoutId": "6af4302c6368a4cce6863ca6",
+        "defaultPlaybackUrl": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
       },
       "features": {
         "search": true,

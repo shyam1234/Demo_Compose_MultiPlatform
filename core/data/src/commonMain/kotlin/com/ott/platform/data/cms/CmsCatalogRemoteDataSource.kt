@@ -74,6 +74,7 @@ class CmsCatalogRemoteDataSource(
             fallbackRailId = railId,
             baseUrl = config.baseUrl,
             deviceType = config.contentDeviceType,
+            fallbackStreamUrl = config.defaultPlaybackUrl,
         )
         if (!config.matchesDevice(rail.deviceTypes)) {
             error("CMS rail $railId is not available for device ${config.contentDeviceType}")

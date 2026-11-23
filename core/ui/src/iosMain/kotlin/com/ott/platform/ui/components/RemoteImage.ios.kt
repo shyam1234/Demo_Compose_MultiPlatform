@@ -26,7 +26,7 @@ actual fun RemoteImage(
     AsyncImage(
         model = url,
         contentDescription = contentDescription,
-        modifier = modifier.background(OttColors.SurfaceElevated),
+        modifier = modifier,
         contentScale = contentScale,
         alignment = alignment,
     )

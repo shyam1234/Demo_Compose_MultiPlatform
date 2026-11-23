@@ -15,6 +15,11 @@ data class CmsConfig(
     val username: String = DEFAULT_USERNAME,
     val password: String = DEFAULT_PASSWORD,
     val fallbackLayoutId: String = DEFAULT_FALLBACK_LAYOUT_ID,
+    /**
+     * Used when a CMS asset has no `playback_urls` / stream fields.
+     * Configured per customer via `cms.defaultPlaybackUrl`.
+     */
+    val defaultPlaybackUrl: String = DEFAULT_PLAYBACK_URL,
 ) {
     fun loginUrl(): String =
         "$baseUrl/v1/login?devicetype=$loginDeviceType"
@@ -41,5 +46,6 @@ data class CmsConfig(
         const val DEFAULT_USERNAME = "dGF0YQ=="
         const val DEFAULT_PASSWORD = "U2FsdGVkX1974CQPT3eKjNplPPsojssg7HDC99WkzZU="
         const val DEFAULT_FALLBACK_LAYOUT_ID = "6af4302c6368a4cce6863ca6"
+        const val DEFAULT_PLAYBACK_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
     }
 }

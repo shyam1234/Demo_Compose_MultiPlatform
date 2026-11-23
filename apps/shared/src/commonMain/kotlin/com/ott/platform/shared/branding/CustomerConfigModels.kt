@@ -82,6 +82,8 @@ data class CmsCustomerConfigDto(
     /** Force a CMS device type (e.g. `web`) instead of the platform default. */
     val deviceTypeOverride: String? = null,
     val fallbackLayoutId: String? = null,
+    /** Fallback HLS/stream URL when CMS assets omit playback_urls (all platforms). */
+    val defaultPlaybackUrl: String? = null,
 )
 
 @Serializable
@@ -133,6 +135,7 @@ data class ActiveCustomerConfig(
     val cmsDeviceTypeOptOut: Boolean,
     val cmsDeviceTypeOverride: String?,
     val cmsFallbackLayoutId: String?,
+    val cmsDefaultPlaybackUrl: String?,
 ) {
     companion object {
         /** Bit-identical defaults to today's hardcoded OTT demo. */
@@ -159,8 +162,14 @@ data class ActiveCustomerConfig(
             cmsDeviceTypeOptOut = false,
             cmsDeviceTypeOverride = null,
             cmsFallbackLayoutId = null,
+            cmsDefaultPlaybackUrl = CmsConfigDefaults.DEFAULT_PLAYBACK_URL,
         )
     }
+}
+
+/** Avoids a hard dependency cycle; mirrors [com.ott.platform.data.cms.CmsConfig] default. */
+internal object CmsConfigDefaults {
+    const val DEFAULT_PLAYBACK_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
 }
 
 data class ResolvedSplash(
@@ -196,4 +205,6 @@ fun CustomerConfigDto.toActive(): ActiveCustomerConfig = ActiveCustomerConfig(
     cmsDeviceTypeOptOut = cms.deviceTypeOptOut || debug.ignoreDeviceTypeFilter,
     cmsDeviceTypeOverride = cms.deviceTypeOverride,
     cmsFallbackLayoutId = cms.fallbackLayoutId,
+    cmsDefaultPlaybackUrl = cms.defaultPlaybackUrl?.takeIf { it.isNotBlank() }
+        ?: CmsConfigDefaults.DEFAULT_PLAYBACK_URL,
 )

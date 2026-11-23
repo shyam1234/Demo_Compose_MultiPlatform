@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,19 +21,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ott.platform.designsystem.OttColors
@@ -39,6 +46,7 @@ import com.ott.platform.designsystem.OttDimens
 import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.RailContentType
 import com.ott.platform.domain.model.ShelfCardStyle
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChannelCard(
@@ -105,6 +113,10 @@ fun ChannelCard(
     val shape = RoundedCornerShape(OttDimens.CardCorner)
     val outerShape = RoundedCornerShape(OttDimens.CardCorner + 2.dp)
     val interaction = remember { MutableInteractionSource() }
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    var cardSize by remember { mutableStateOf(IntSize.Zero) }
     val imageUrl = remember(channel.id, channel.images, rawDisplayType, style, contentType) {
         channel.imageForRail(
             rawDisplayType = rawDisplayType ?: style.name,
@@ -115,12 +127,27 @@ fun ChannelCard(
     Column(
         modifier = modifier
             .width(width)
-            .onFocusChanged { hasFocus = it.isFocused }
-            .graphicsLayer {
-                // Subtle leanback lift — parent rails must not clip this.
-                val scale = if (isTv && isFocused) 1.05f else 1f
-                scaleX = scale
-                scaleY = scale
+            .onSizeChanged { cardSize = it }
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onFocusChanged { state ->
+                hasFocus = state.isFocused
+                if (state.isFocused) {
+                    // Expand the bring-into-view rect so first/last rails aren't clipped
+                    // by top/bottom chrome when navigating with keyboard / D-pad.
+                    scope.launch {
+                        val margin = with(density) { 56.dp.toPx() }
+                        val w = cardSize.width.toFloat().coerceAtLeast(1f)
+                        val h = cardSize.height.toFloat().coerceAtLeast(1f)
+                        bringIntoViewRequester.bringIntoView(
+                            Rect(
+                                left = -margin * 0.35f,
+                                top = -margin,
+                                right = w + margin * 0.35f,
+                                bottom = h + margin,
+                            ),
+                        )
+                    }
+                }
             }
             .clickable(
                 interactionSource = interaction,
@@ -134,6 +161,12 @@ fun ChannelCard(
             modifier = Modifier
                 .width(width)
                 .height(height)
+                // Scale only the poster — not the metadata — so titles aren't clipped by the feed.
+                .graphicsLayer {
+                    val scale = if (isTv && isFocused) 1.04f else 1f
+                    scaleX = scale
+                    scaleY = scale
+                }
                 .then(
                     if (isFocused) {
                         Modifier.border(OttDimens.FocusBorder, OttColors.Focus, outerShape)
@@ -181,19 +214,8 @@ fun ChannelCard(
                     )
                 }
 
-                if (channel.canPlay) {
-                    Text(
-                        text = "▶",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(OttColors.Accent.copy(alpha = 0.9f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
-                } else if (channel.parentalRating != null) {
+                // Parental rating only — no play badge (defaultPlaybackUrl makes most items playable).
+                if (!channel.parentalRating.isNullOrBlank()) {
                     Text(
                         text = channel.parentalRating!!,
                         color = Color.White,

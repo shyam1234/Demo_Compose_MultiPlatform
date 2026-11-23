@@ -30,8 +30,8 @@ object OttColors {
 object OttDimens {
     val ScreenPadding = 48.dp
     val PhoneScreenPadding = 16.dp
-    val ShelfSpacing = 28.dp
-    val PhoneShelfSpacing = 18.dp
+    val ShelfSpacing = 40.dp
+    val PhoneShelfSpacing = 24.dp
     // Landscape (16:9)
     val CardWidth = 160.dp
     val CardHeight = 90.dp
@@ -51,18 +51,17 @@ object OttDimens {
     val TvBannerCardWidth = 360.dp
     val TvBannerCardHeight = 162.dp
     val CardCorner = 12.dp
-    val CardTitleHeight = 38.dp
+    val CardTitleHeight = 52.dp
     val HeroHeight = 230.dp
     val TvHeroHeight = 400.dp
     val FocusBorder = 4.dp
     val RowGap = 20.dp
     val PhoneRowGap = 12.dp
     /**
-     * Left inset for thematic / branded rails so CMS `rail_background_image`
-     * logo artwork stays fully visible; cards start after this gutter.
+     * Thematic / branded rails: cards start after this fraction of the rail width
+     * so CMS `rail_background_image` logo + season title stay fully visible.
      */
-    val ThematicLogoGutter = 240.dp
-    val PhoneThematicLogoGutter = 148.dp
+    const val ThematicCardStartFraction = 0.40f
     val ThematicRailCorner = 20.dp
     val PhoneThematicRailCorner = 16.dp
     val ThematicRailInnerPadding = 22.dp

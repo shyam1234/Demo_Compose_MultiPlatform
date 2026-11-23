@@ -154,7 +154,11 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .testTag("home_feed"),
-                    contentPadding = PaddingValues(bottom = if (isTv) 48.dp else 16.dp),
+                    // Top/bottom insets so the first & last rails stay fully visible on D-pad / keyboard.
+                    contentPadding = PaddingValues(
+                        top = if (isTv) 20.dp else 8.dp,
+                        bottom = if (isTv) 120.dp else 64.dp,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(
                         if (isTv) OttDimens.ShelfSpacing else OttDimens.PhoneShelfSpacing,
                     ),

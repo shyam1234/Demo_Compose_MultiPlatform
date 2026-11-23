@@ -135,6 +135,7 @@ object CmsCatalogMapper {
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
         mapDiscoveryDockChildren: Boolean = true,
         deviceType: String = platformCmsMenuDeviceType(),
+        fallbackStreamUrl: String = CmsConfig.DEFAULT_PLAYBACK_URL,
     ): CmsRail {
         val railId = dto.id.ifBlank { fallbackRailId }
         val railTitle = dto.name.trim().ifEmpty { "Featured" }
@@ -154,6 +155,7 @@ object CmsCatalogMapper {
                     contentType = contentType,
                     baseUrl = baseUrl,
                     deviceType = deviceType,
+                    fallbackStreamUrl = fallbackStreamUrl,
                 )
             }
         val backgroundImages = CmsDeviceType.filterImagesForDevice(dto.railImages, deviceType)
@@ -172,6 +174,7 @@ object CmsCatalogMapper {
                         baseUrl = baseUrl,
                         mapDiscoveryDockChildren = false,
                         deviceType = deviceType,
+                        fallbackStreamUrl = fallbackStreamUrl,
                     )
                 }
             if (fromResponse.isNotEmpty()) {
@@ -212,12 +215,54 @@ object CmsCatalogMapper {
         images: List<CmsAssetImageDto>,
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
     ): String? {
-        val preferred = images.firstOrNull { img ->
-            normalizeImageType(img.imagetype) == normalizeImageType(ImageTypes.RAIL_BACKGROUND_IMAGE)
-        } ?: images.firstOrNull()
-        return preferred?.let { img ->
-            normalizeAssetUrl(img.imgurl, baseUrl) ?: normalizeAssetUrl(img.imageurl, baseUrl)
+        if (images.isEmpty()) return null
+        val preferredType = normalizeImageType(ImageTypes.RAIL_BACKGROUND_IMAGE)
+        val ordered = images.sortedByDescending { img ->
+            normalizeImageType(img.imagetype) == preferredType
         }
+        for (img in ordered) {
+            val url = normalizeRailBackgroundUrl(img.imgurl, baseUrl)
+                ?: normalizeRailBackgroundUrl(img.imageurl, baseUrl)
+            if (url != null) return url
+        }
+        return null
+    }
+
+    /**
+     * Rail backgrounds often live under `/mount/...` and 502 when requested directly.
+     * Prefer Play-CMS `/v1/imageresize` (same path used by customer branding assets).
+     */
+    internal fun normalizeRailBackgroundUrl(
+        rawUrl: String?,
+        baseUrl: String,
+        width: Int = 1920,
+        height: Int = 400,
+    ): String? {
+        val trimmed = rawUrl.orEmpty().trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.contains(".svg", ignoreCase = true)) return null
+
+        val mountPath = when {
+            trimmed.contains("/mount/") -> {
+                val idx = trimmed.indexOf("/mount/")
+                trimmed.substring(idx).substringBefore('?')
+            }
+            trimmed.startsWith("/") -> trimmed.substringBefore('?')
+            trimmed.startsWith("http://", ignoreCase = true) ||
+                trimmed.startsWith("https://", ignoreCase = true) -> {
+                // Already absolute non-mount CDN URL — use as-is.
+                return trimmed.replace(" ", "%20")
+            }
+            else -> "/$trimmed".substringBefore('?')
+        }
+
+        val encodedPath = mountPath
+            .split('/')
+            .filter { it.isNotEmpty() }
+            .joinToString(separator = "%2F", prefix = "%2F") { segment ->
+                segment.replace(" ", "%20")
+            }
+        return "${baseUrl.trimEnd('/')}/v1/imageresize/w_${width}/h_${height}/original/$encodedPath"
     }
 
     private fun normalizeImageType(raw: String): String =
@@ -231,6 +276,7 @@ object CmsCatalogMapper {
         contentType: RailContentType,
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
         deviceType: String = platformCmsMenuDeviceType(),
+        fallbackStreamUrl: String = CmsConfig.DEFAULT_PLAYBACK_URL,
     ): Channel {
         val fallbackName = (dto.name as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty().trim()
         val title = dto.title.trim()
@@ -281,7 +327,7 @@ object CmsCatalogMapper {
             dto.playbackUrls?.smoothUrl,
             dto.smoothUrl,
             dto.channelUrl,
-        ).orEmpty()
+        ).orEmpty().ifBlank { fallbackStreamUrl.trim() }
 
         val trailerUrl = firstNonBlank(
             dto.trailerUrls?.hlsUrl,

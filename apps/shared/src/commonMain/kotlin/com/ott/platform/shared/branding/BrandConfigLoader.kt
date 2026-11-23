@@ -55,6 +55,8 @@ object BrandConfigLoader {
             deviceTypeOptOut = customer.cmsDeviceTypeOptOut,
             fallbackLayoutId = customer.cmsFallbackLayoutId?.takeIf { it.isNotBlank() }
                 ?: CmsConfig.DEFAULT_FALLBACK_LAYOUT_ID,
+            defaultPlaybackUrl = customer.cmsDefaultPlaybackUrl?.takeIf { it.isNotBlank() }
+                ?: CmsConfig.DEFAULT_PLAYBACK_URL,
         )
     }
 }
