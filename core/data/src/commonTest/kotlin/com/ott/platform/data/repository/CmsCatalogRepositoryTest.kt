@@ -229,7 +229,9 @@ class CmsCatalogRepositoryTest {
         assertEquals(ShelfCardStyle.Landscape, home.shelves[0].cardStyle)
         assertEquals(ShelfCardStyle.Portrait, home.shelves[1].cardStyle)
         assertEquals(RailContentType.Top10, home.shelves[1].contentType)
-        assertEquals("The RIP", home.hero?.title)
+        // Hero is CMS-only (`rail_content_type=hero/featured`); these rails are ordinary shelves.
+        assertEquals(emptyList(), home.heroes)
+        assertEquals("The RIP", home.shelves[0].items.single().title)
         assertTrue(local.getChannelCount() == 2L)
 
         // Dynamic secondary layout switch
