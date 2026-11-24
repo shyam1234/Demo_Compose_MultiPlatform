@@ -31,6 +31,21 @@ object CmsDeviceType {
         if (isPhone) ANDROID_MOBILE else ANDROID_TV
 
     /**
+     * Ordered menu `devicetype` candidates to try until a non-empty menu is returned.
+     *
+     * Phones: primary → [ANDROID_MOBILE] → [ANDROID_TV] (last resort when mobile menu has no L1 items).
+     * Other form factors: primary → [ANDROID_TV].
+     */
+    fun menuDeviceTypeCandidates(primary: String, isPhone: Boolean): List<String> {
+        val ordered = LinkedHashSet<String>()
+        val trimmed = primary.trim()
+        if (trimmed.isNotEmpty()) ordered += trimmed
+        ordered += menuFallbackDeviceType(isPhone)
+        if (isPhone) ordered += ANDROID_TV
+        return ordered.toList()
+    }
+
+    /**
      * Returns true when [currentDevice] is allowed by CMS [allowedDevices].
      * Empty allowed list = unrestricted. `All` = unrestricted.
      */

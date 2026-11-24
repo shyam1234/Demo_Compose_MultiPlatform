@@ -148,5 +148,9 @@ fun isServerUnavailableMessage(message: String?): Boolean {
         "ssl",
         "handshake",
         "host",
+        "not available for device",
+        "cms rail",
+        "cms layout",
+        "cms catalog",
     ).any { it in m }
 }

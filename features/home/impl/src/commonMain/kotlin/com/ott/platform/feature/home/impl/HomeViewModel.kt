@@ -6,6 +6,7 @@ import com.ott.platform.domain.model.HomeFeed
 import com.ott.platform.domain.model.OttResult
 import com.ott.platform.domain.usecase.GetHomeFeedUseCase
 import com.ott.platform.domain.usecase.GetLayoutFeedUseCase
+import com.ott.platform.domain.usecase.InvalidateCatalogCacheUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,7 @@ class HomeViewModel(
     private val initialLayoutId: String? = null,
     private val getHomeFeed: GetHomeFeedUseCase,
     private val getLayoutFeed: GetLayoutFeedUseCase,
+    private val invalidateCatalogCache: InvalidateCatalogCacheUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState(activeLayoutId = initialLayoutId))
@@ -39,7 +41,11 @@ class HomeViewModel(
 
     fun refresh(layoutId: String? = _state.value.activeLayoutId) {
         viewModelScope.launch {
+            val recoveringFromError = _state.value.error != null
             _state.update { it.copy(isLoading = true, activeLayoutId = layoutId, error = null) }
+            if (recoveringFromError) {
+                runCatching { invalidateCatalogCache() }
+            }
             val result = if (!layoutId.isNullOrBlank()) {
                 getLayoutFeed(layoutId, DEFAULT_SHELF_LIMIT)
             } else {

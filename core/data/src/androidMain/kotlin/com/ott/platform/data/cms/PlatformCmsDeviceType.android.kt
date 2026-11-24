@@ -6,7 +6,7 @@ import android.content.Context
 /**
  * Resolves CMS `devicetype` for Android:
  * - tablets (`smallestScreenWidthDp >= 600`) → [CmsDeviceType.ANDROID_TV]
- * - phones → [CmsDeviceType.ANDROID]
+ * - phones → [CmsDeviceType.ANDROID_MOBILE]
  *
  * Call [installAndroidCmsDeviceTypeContext] from `Application.onCreate` before reading CMS config.
  * The TV app still overrides to [CmsDeviceType.ANDROID_TV] explicitly.
@@ -31,7 +31,7 @@ private fun isAndroidPhoneFormFactor(): Boolean =
     androidSmallestWidthDp() < TABLET_SMALLEST_WIDTH_DP
 
 actual fun platformCmsMenuDeviceType(): String =
-    if (isAndroidPhoneFormFactor()) CmsDeviceType.ANDROID else CmsDeviceType.ANDROID_TV
+    if (isAndroidPhoneFormFactor()) CmsDeviceType.ANDROID_MOBILE else CmsDeviceType.ANDROID_TV
 
 actual fun platformCmsMenuFallbackDeviceType(): String =
     CmsDeviceType.menuFallbackDeviceType(isPhone = isAndroidPhoneFormFactor())

@@ -14,6 +14,7 @@ import com.ott.platform.domain.usecase.GetChannelDetailsUseCase
 import com.ott.platform.domain.usecase.GetHomeFeedUseCase
 import com.ott.platform.domain.usecase.GetLayoutFeedUseCase
 import com.ott.platform.domain.usecase.GetMenuUseCase
+import com.ott.platform.domain.usecase.InvalidateCatalogCacheUseCase
 import com.ott.platform.domain.usecase.SearchChannelsUseCase
 import com.ott.platform.domain.usecase.ToggleWatchlistUseCase
 import com.ott.platform.logging.OttLogger
@@ -60,6 +61,7 @@ val coreDomainModule = module {
     factoryOf(::GetMenuUseCase)
     factoryOf(::GetHomeFeedUseCase)
     factoryOf(::GetLayoutFeedUseCase)
+    factoryOf(::InvalidateCatalogCacheUseCase)
     factoryOf(::SearchChannelsUseCase)
     factoryOf(::GetChannelDetailsUseCase)
     factoryOf(::ToggleWatchlistUseCase)

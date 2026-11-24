@@ -39,6 +39,17 @@ class CmsCatalogRepository(
     private val shelfCache = LinkedHashMap<String, ContentShelf>()
     private val channelIndex = LinkedHashMap<String, Channel>()
 
+    override suspend fun invalidateCache() {
+        mutex.withLock {
+            cachedMenu = null
+            layoutCache.clear()
+            shelfCache.clear()
+            channelIndex.clear()
+        }
+        remote.prepareForReconnect()
+        logger.i(TAG, "Catalog memory cache invalidated for reconnect")
+    }
+
     override suspend fun getMenu(): OttResult<List<AppMenuItem>> = runCatchingResult {
         mutex.withLock {
             cachedMenu?.let { return@withLock it }
@@ -47,6 +58,8 @@ class CmsCatalogRepository(
             val dbUpdatedAt = if (dbMenu.isNotEmpty()) local?.getMenuUpdatedAtMs() else null
             if (dbMenu.isNotEmpty() && isFresh(dbUpdatedAt)) {
                 cachedMenu = dbMenu
+                // Cached menus for phones usually came from the androidtv fallback catalog.
+                remote.alignEffectiveDeviceTypeForCachedCatalog()
                 return@withLock dbMenu
             }
 
@@ -59,6 +72,7 @@ class CmsCatalogRepository(
                     fetched
                 } else if (dbMenu.isNotEmpty()) {
                     cachedMenu = dbMenu
+                    remote.alignEffectiveDeviceTypeForCachedCatalog()
                     dbMenu
                 } else {
                     emptyList()
@@ -67,6 +81,7 @@ class CmsCatalogRepository(
                 if (dbMenu.isNotEmpty()) {
                     logger.w(TAG, "Offline fallback: serving ${dbMenu.size} cached menu items")
                     cachedMenu = dbMenu
+                    remote.alignEffectiveDeviceTypeForCachedCatalog()
                     dbMenu
                 } else {
                     throw t

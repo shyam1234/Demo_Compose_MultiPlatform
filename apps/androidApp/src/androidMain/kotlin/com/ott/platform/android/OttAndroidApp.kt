@@ -22,7 +22,7 @@ class OttAndroidApp : Application() {
         installAndroidCmsDeviceTypeContext(this)
         val customer = runBlocking { BrandConfigLoader.loadActiveCustomer() }
         val brandCms = BrandConfigLoader.toCmsConfig(customer)
-        val platformDefault = platformCmsMenuDeviceType() // android | androidtv (tablet)
+        val platformDefault = platformCmsMenuDeviceType() // androidmobile | androidtv (tablet)
         val customerChoseDevice = !customer.cmsDeviceTypeOverride.isNullOrBlank() ||
             !customer.cmsMenuDeviceType.isNullOrBlank()
         val device = if (customerChoseDevice) {
@@ -38,7 +38,7 @@ class OttAndroidApp : Application() {
                 coreModules() + featureModules() + customerModule(customer) + listOf(
                     androidPlayerModule,
                     module {
-                        // Phone → android; tablet → androidtv (unless customer config overrides).
+                        // Phone → androidmobile; tablet → androidtv (unless customer config overrides).
                         single {
                             brandCms.copy(
                                 menuDeviceType = device,

@@ -33,6 +33,7 @@ class GetMenuAndLayoutFeedUseCaseTest {
             OttResult.Success(emptyList())
         override suspend fun getChannel(id: ContentId): OttResult<Channel> =
             OttResult.Error("unused")
+        override suspend fun invalidateCache() = Unit
     }
 
     @Test

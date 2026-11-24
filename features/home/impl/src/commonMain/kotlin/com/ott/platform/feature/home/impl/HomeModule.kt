@@ -10,6 +10,7 @@ val homeModule = module {
             initialLayoutId = layoutId,
             getHomeFeed = get(),
             getLayoutFeed = get(),
+            invalidateCatalogCache = get(),
         )
     }
 }

@@ -49,5 +49,6 @@ class GetHomeFeedUseCaseTest {
         override suspend fun getChannelsByCategory(categoryId: String, limit: Int): OttResult<List<Channel>> = OttResult.Success(emptyList())
         override suspend fun search(query: String, limit: Int): OttResult<List<Channel>> = OttResult.Success(emptyList())
         override suspend fun getChannel(id: ContentId): OttResult<Channel> = OttResult.Success(channel)
+        override suspend fun invalidateCache() = Unit
     }
 }

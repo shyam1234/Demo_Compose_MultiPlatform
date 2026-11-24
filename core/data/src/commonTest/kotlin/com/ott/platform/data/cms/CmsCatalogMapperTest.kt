@@ -428,6 +428,18 @@ class CmsCatalogMapperTest {
         assertTrue(CmsDeviceType.matches(emptyList(), "web"))
         assertEquals(CmsDeviceType.ANDROID_MOBILE, CmsDeviceType.menuFallbackDeviceType(isPhone = true))
         assertEquals(CmsDeviceType.ANDROID_TV, CmsDeviceType.menuFallbackDeviceType(isPhone = false))
+        assertEquals(
+            listOf(CmsDeviceType.ANDROID_MOBILE, CmsDeviceType.ANDROID_TV),
+            CmsDeviceType.menuDeviceTypeCandidates(CmsDeviceType.ANDROID_MOBILE, isPhone = true),
+        )
+        assertEquals(
+            listOf("ios", CmsDeviceType.ANDROID_MOBILE, CmsDeviceType.ANDROID_TV),
+            CmsDeviceType.menuDeviceTypeCandidates("ios", isPhone = true),
+        )
+        assertEquals(
+            listOf("web", CmsDeviceType.ANDROID_TV),
+            CmsDeviceType.menuDeviceTypeCandidates("web", isPhone = false),
+        )
         assertTrue(CmsDeviceType.matches(listOf("android"), CmsDeviceType.ANDROID_MOBILE))
         assertTrue(CmsDeviceType.matches(listOf(CmsDeviceType.ANDROID_MOBILE), "android"))
     }

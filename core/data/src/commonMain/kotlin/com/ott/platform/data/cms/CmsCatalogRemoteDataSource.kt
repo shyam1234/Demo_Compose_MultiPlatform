@@ -25,53 +25,93 @@ class CmsCatalogRemoteDataSource(
     var effectiveDeviceType: String = config.menuDeviceType
         private set
 
-    fun matchesDevice(allowedDevices: List<String>): Boolean =
-        config.deviceTypeOptOut || CmsDeviceType.matches(allowedDevices, effectiveDeviceType)
+    /**
+     * Content may be tagged for a fallback catalog (e.g. phone loads `androidtv` menu while
+     * primary is `androidmobile`). Accept any candidate device type for the current form factor.
+     */
+    fun matchesDevice(allowedDevices: List<String>): Boolean {
+        if (config.deviceTypeOptOut) return true
+        val isPhone = CmsDeviceType.sameDevice(
+            platformCmsMenuFallbackDeviceType(),
+            CmsDeviceType.ANDROID_MOBILE,
+        )
+        val candidates = CmsDeviceType.menuDeviceTypeCandidates(
+            primary = effectiveDeviceType,
+            isPhone = isPhone,
+        )
+        return candidates.any { CmsDeviceType.matches(allowedDevices, it) }
+    }
+
+    /** Clear auth + device state so a retry after reconnect does a fresh login/menu resolve. */
+    suspend fun prepareForReconnect() {
+        authManager.invalidateToken()
+        effectiveDeviceType = config.menuDeviceType
+    }
 
     /**
-     * Loads the CMS menu for [deviceType], then retries with the platform fallback
-     * ([platformCmsMenuFallbackDeviceType]) when the primary call errors or returns empty.
+     * When serving a cached menu without re-running [fetchMenu], phones must still accept
+     * `androidtv`-tagged rails (mobile CMS menu is often empty / stub-only).
+     */
+    fun alignEffectiveDeviceTypeForCachedCatalog() {
+        val isPhone = CmsDeviceType.sameDevice(
+            platformCmsMenuFallbackDeviceType(),
+            CmsDeviceType.ANDROID_MOBILE,
+        )
+        if (isPhone) {
+            effectiveDeviceType = CmsDeviceType.ANDROID_TV
+        }
+    }
+
+    /**
+     * Soft device gate for rails/layouts: mismatch is skipped by callers instead of failing
+     * the whole home feed after a reconnect.
+     */
+    fun requireDeviceMatchOrThrow(allowedDevices: List<String>, label: String) {
+        if (matchesDevice(allowedDevices)) return
+        error("$label is not available for device $effectiveDeviceType")
+    }
+
+    /**
+     * Loads the CMS menu, trying [deviceType] then platform fallbacks until a non-empty menu
+     * is returned. Phones always include [CmsDeviceType.ANDROID_MOBILE], then [CmsDeviceType.ANDROID_TV]
+     * if the mobile menu exists but has no L1 items (current iPhone CMS gap).
      */
     suspend fun fetchMenu(
         deviceType: String = config.menuDeviceType,
         languageCode: String = config.langCode,
     ): List<AppMenuItem> {
-        val primaryError: Throwable? = try {
-            val primary = fetchMenuOnce(deviceType = deviceType, languageCode = languageCode)
-            if (primary.isNotEmpty()) {
-                effectiveDeviceType = deviceType
-                return primary
+        val phoneFallback = CmsDeviceType.ANDROID_MOBILE
+        val isPhone = CmsDeviceType.sameDevice(
+            platformCmsMenuFallbackDeviceType(),
+            phoneFallback,
+        )
+        val candidates = CmsDeviceType.menuDeviceTypeCandidates(
+            primary = deviceType,
+            isPhone = isPhone,
+        )
+        var lastError: Throwable? = null
+        for ((index, candidate) in candidates.withIndex()) {
+            try {
+                val items = fetchMenuOnce(deviceType = candidate, languageCode = languageCode)
+                if (items.isNotEmpty()) {
+                    if (index > 0) {
+                        logger.i(TAG, "Menu loaded via fallback deviceType=$candidate")
+                    }
+                    effectiveDeviceType = candidate
+                    return items
+                }
+                logger.i(TAG, "No usable CMS menu items for deviceType=$candidate")
+            } catch (t: Throwable) {
+                lastError = t
+                logger.w(
+                    TAG,
+                    "Menu failed for deviceType=$candidate (${t.message})" +
+                        if (index < candidates.lastIndex) "; trying next fallback" else "",
+                )
             }
-            null
-        } catch (t: Throwable) {
-            t
         }
-
-        val fallback = platformCmsMenuFallbackDeviceType()
-        if (CmsDeviceType.sameDevice(fallback, deviceType)) {
-            primaryError?.let { throw it }
-            logger.i(TAG, "No CMS menu for deviceType=$deviceType (fallback equals primary)")
-            return emptyList()
-        }
-
-        if (primaryError != null) {
-            logger.w(
-                TAG,
-                "Menu failed for deviceType=$deviceType (${primaryError.message}); " +
-                    "retrying with fallback=$fallback",
-            )
-        } else {
-            logger.i(
-                TAG,
-                "Menu empty for deviceType=$deviceType; retrying with fallback=$fallback",
-            )
-        }
-
-        val fallbackItems = fetchMenuOnce(deviceType = fallback, languageCode = languageCode)
-        if (fallbackItems.isNotEmpty()) {
-            effectiveDeviceType = fallback
-        }
-        return fallbackItems
+        lastError?.let { throw it }
+        return emptyList()
     }
 
     private suspend fun fetchMenuOnce(
@@ -112,9 +152,7 @@ class CmsCatalogRemoteDataSource(
         val body = authenticatedGetText(url)
         val dto = OttJson.instance.decodeFromString<CmsLayoutResponseDto>(body)
         val layout = CmsCatalogMapper.mapLayout(dto, fallbackLayoutId = layoutId, baseUrl = config.baseUrl)
-        if (!matchesDevice(layout.deviceTypes)) {
-            error("CMS layout $layoutId is not available for device $effectiveDeviceType")
-        }
+        requireDeviceMatchOrThrow(layout.deviceTypes, "CMS layout $layoutId")
         return layout
     }
 
@@ -125,16 +163,22 @@ class CmsCatalogRemoteDataSource(
         val dto = OttJson.instance.decodeFromString<CmsRailsResponseDto>(body)
         val railDto = dto.results.firstOrNull()
             ?: error("CMS rail $railId returned empty results")
+        // Prefer TV image variants when phone catalog fell back to androidtv.
+        val mappingDevice = if (
+            CmsDeviceType.sameDevice(platformCmsMenuFallbackDeviceType(), CmsDeviceType.ANDROID_MOBILE)
+        ) {
+            CmsDeviceType.ANDROID_TV
+        } else {
+            effectiveDeviceType
+        }
         val rail = CmsCatalogMapper.mapRail(
             dto = railDto,
             fallbackRailId = railId,
             baseUrl = config.baseUrl,
-            deviceType = effectiveDeviceType,
+            deviceType = mappingDevice,
             fallbackStreamUrl = config.defaultPlaybackUrl,
         )
-        if (!matchesDevice(rail.deviceTypes)) {
-            error("CMS rail $railId is not available for device $effectiveDeviceType")
-        }
+        requireDeviceMatchOrThrow(rail.deviceTypes, "CMS rail $railId")
         return rail
     }
 

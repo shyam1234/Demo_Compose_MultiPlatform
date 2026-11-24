@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ott.platform.domain.model.AppMenuItem
 import com.ott.platform.domain.model.OttResult
 import com.ott.platform.domain.usecase.GetMenuUseCase
+import com.ott.platform.domain.usecase.InvalidateCatalogCacheUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,7 @@ data class AppMenuUiState(
 
 class AppMenuViewModel(
     private val getMenu: GetMenuUseCase,
+    private val invalidateCatalogCache: InvalidateCatalogCacheUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AppMenuUiState())
@@ -30,7 +32,11 @@ class AppMenuViewModel(
 
     fun refresh() {
         viewModelScope.launch {
+            val shouldForceNetwork = _state.value.error != null || _state.value.items.isEmpty()
             _state.update { it.copy(isLoading = true, error = null) }
+            if (shouldForceNetwork) {
+                runCatching { invalidateCatalogCache() }
+            }
             when (val result = getMenu()) {
                 is OttResult.Success -> _state.update {
                     it.copy(

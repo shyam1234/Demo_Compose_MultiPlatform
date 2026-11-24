@@ -6,13 +6,13 @@ import platform.UIKit.UIUserInterfaceIdiomPad
 /**
  * Resolves CMS `devicetype` for Apple mobile:
  * - iPad → [CmsDeviceType.ANDROID_TV] (same TV catalog as Android tablet)
- * - iPhone → [CmsDeviceType.IOS]
+ * - iPhone → [CmsDeviceType.ANDROID_MOBILE] (CMS has no `ios` menu; phone catalog is androidmobile)
  */
 private fun isIosPhoneFormFactor(): Boolean =
     UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPad
 
 actual fun platformCmsMenuDeviceType(): String =
-    if (isIosPhoneFormFactor()) CmsDeviceType.IOS else CmsDeviceType.ANDROID_TV
+    if (isIosPhoneFormFactor()) CmsDeviceType.ANDROID_MOBILE else CmsDeviceType.ANDROID_TV
 
 actual fun platformCmsMenuFallbackDeviceType(): String =
     CmsDeviceType.menuFallbackDeviceType(isPhone = isIosPhoneFormFactor())

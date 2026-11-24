@@ -2,6 +2,7 @@ package com.ott.platform.feature.home.impl
 
 import com.ott.platform.domain.usecase.GetHomeFeedUseCase
 import com.ott.platform.domain.usecase.GetLayoutFeedUseCase
+import com.ott.platform.domain.usecase.InvalidateCatalogCacheUseCase
 import com.ott.platform.testing.FakeCatalogRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,6 +29,7 @@ class HomeViewModelTest {
                 initialLayoutId = null,
                 getHomeFeed = GetHomeFeedUseCase(repo),
                 getLayoutFeed = GetLayoutFeedUseCase(repo),
+                invalidateCatalogCache = InvalidateCatalogCacheUseCase(repo),
             )
             advanceUntilIdle()
             val state = vm.state.value

@@ -34,6 +34,7 @@ class SearchChannelsUseCaseTest {
             return OttResult.Success(hits.take(limit))
         }
         override suspend fun getChannel(id: ContentId): OttResult<Channel> = OttResult.Success(sample)
+        override suspend fun invalidateCache() = Unit
     }
 
     private val useCase = SearchChannelsUseCase(repo)

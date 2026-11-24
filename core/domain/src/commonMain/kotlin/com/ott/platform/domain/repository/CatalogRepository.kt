@@ -15,4 +15,7 @@ interface CatalogRepository {
     suspend fun getChannelsByCategory(categoryId: String, limit: Int = 40): OttResult<List<Channel>>
     suspend fun search(query: String, limit: Int = 40): OttResult<List<Channel>>
     suspend fun getChannel(id: ContentId): OttResult<Channel>
+
+    /** Drop in-memory catalog caches so the next load hits the network (e.g. after reconnect). */
+    suspend fun invalidateCache()
 }

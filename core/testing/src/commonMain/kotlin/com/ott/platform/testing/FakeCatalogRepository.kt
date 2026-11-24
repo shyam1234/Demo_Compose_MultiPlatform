@@ -78,6 +78,8 @@ class FakeCatalogRepository(
         channels.firstOrNull { it.id == id }?.let { OttResult.Success(it) }
             ?: OttResult.Error("not found")
 
+    override suspend fun invalidateCache() = Unit
+
     companion object {
         fun sampleMenu(): List<AppMenuItem> = listOf(
             AppMenuItem(id = "tv_home", title = "Home", layoutId = "home_layout"),

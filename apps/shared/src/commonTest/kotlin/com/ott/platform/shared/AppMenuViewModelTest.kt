@@ -1,6 +1,7 @@
 package com.ott.platform.shared
 
 import com.ott.platform.domain.usecase.GetMenuUseCase
+import com.ott.platform.domain.usecase.InvalidateCatalogCacheUseCase
 import com.ott.platform.testing.FakeCatalogRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,7 +22,11 @@ class AppMenuViewModelTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
         try {
-            val vm = AppMenuViewModel(GetMenuUseCase(FakeCatalogRepository()))
+            val repo = FakeCatalogRepository()
+            val vm = AppMenuViewModel(
+                getMenu = GetMenuUseCase(repo),
+                invalidateCatalogCache = InvalidateCatalogCacheUseCase(repo),
+            )
             advanceUntilIdle()
             val state = vm.state.value
             assertFalse(state.isLoading)
