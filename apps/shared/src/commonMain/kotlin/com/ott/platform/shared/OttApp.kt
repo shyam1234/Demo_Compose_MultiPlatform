@@ -1,7 +1,6 @@
 package com.ott.platform.shared
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,23 +11,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -56,7 +46,6 @@ import com.ott.platform.ui.components.OttErrorPage
 import com.ott.platform.ui.components.OttMenuItem
 import com.ott.platform.ui.components.OttPhoneTopBar
 import com.ott.platform.ui.components.OttTopMenu
-import com.ott.platform.ui.components.isServerUnavailableMessage
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -116,15 +105,12 @@ fun OttApp(
         val showPhoneBottomMenu = showPhoneChrome && phoneBottomTabs.isNotEmpty()
         val isPlayer = currentRoute == OttRoutes.PLAYER
 
-        val focusManager = LocalFocusManager.current
         val inputModeManager = LocalInputModeManager.current
-        val rootFocusRequester = remember { FocusRequester() }
-        var rootIsFocused by remember { mutableStateOf(false) }
-        var childHasFocus by remember { mutableStateOf(false) }
-
-        LaunchedEffect(currentRoute, rootIsFocused, childHasFocus) {
-            if (currentRoute != null && currentRoute != OttRoutes.SPLASH && !rootIsFocused && !childHasFocus) {
-                runCatching { rootFocusRequester.requestFocus() }
+        // TV / D-pad: enable Keyboard focus traversal once. Do NOT install a root
+        // focusable or manual moveFocus — that races LazyList disposal and steals focus.
+        LaunchedEffect(isTv) {
+            if (isTv) {
+                inputModeManager.requestInputMode(InputMode.Keyboard)
             }
         }
 
@@ -143,41 +129,18 @@ fun OttApp(
                 .fillMaxSize()
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                    val direction = when (event.key) {
-                        Key.DirectionUp -> FocusDirection.Up
-                        Key.DirectionDown -> FocusDirection.Down
-                        Key.DirectionLeft -> FocusDirection.Left
-                        Key.DirectionRight -> FocusDirection.Right
-                        else -> null
-                    }
-                    if (direction != null) {
-                        inputModeManager.requestInputMode(InputMode.Keyboard)
-                        if (!childHasFocus) {
-                            val fallback = if (direction == FocusDirection.Up || direction == FocusDirection.Left) {
-                                FocusDirection.Previous
-                            } else {
-                                FocusDirection.Next
-                            }
-                            return@onKeyEvent focusManager.moveFocus(direction) ||
-                                focusManager.moveFocus(fallback)
-                        }
-                        return@onKeyEvent focusManager.moveFocus(direction)
-                    }
-                    if (event.key == Key.Escape || event.key == Key.Back) {
-                        if (navController.previousBackStackEntry != null) {
+                    // Only handle system Back — directional keys belong to Compose focus.
+                    if (event.key == Key.Escape || event.key == Key.Back || event.key == Key.Backspace) {
+                        if (currentRoute != OttRoutes.SPLASH &&
+                            currentRoute != OttRoutes.HOME &&
+                            navController.previousBackStackEntry != null
+                        ) {
                             navController.popBackStack()
                             return@onKeyEvent true
                         }
                     }
                     false
-                }
-                .focusRequester(rootFocusRequester)
-                .focusProperties { canFocus = !childHasFocus }
-                .onFocusChanged { state ->
-                    rootIsFocused = state.isFocused
-                    childHasFocus = state.hasFocus && !state.isFocused
-                }
-                .focusable(),
+                },
         ) {
         Scaffold(
             containerColor = OttColors.Background,

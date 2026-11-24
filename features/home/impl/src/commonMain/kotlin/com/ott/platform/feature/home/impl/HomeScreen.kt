@@ -1,6 +1,7 @@
 package com.ott.platform.feature.home.impl
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -138,11 +140,14 @@ fun HomeScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
+                        .focusGroup()
+                        .focusRestorer()
                         .testTag("home_feed"),
-                    // Top/bottom insets so the first & last rails stay fully visible on D-pad / keyboard.
+                    // Real list insets only (chrome + last-item breathing room) — focus
+                    // bring-into-view owns visibility, not oversized padding hacks.
                     contentPadding = PaddingValues(
-                        top = if (isTv) 20.dp else 8.dp,
-                        bottom = if (isTv) 120.dp else 64.dp,
+                        top = if (isTv) 12.dp else 8.dp,
+                        bottom = if (isTv) 72.dp else 64.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(
                         if (isTv) OttDimens.ShelfSpacing else OttDimens.PhoneShelfSpacing,

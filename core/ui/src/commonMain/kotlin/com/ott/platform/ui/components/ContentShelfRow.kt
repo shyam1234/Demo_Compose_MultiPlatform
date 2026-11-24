@@ -24,15 +24,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -46,7 +44,6 @@ import com.ott.platform.domain.model.Channel
 import com.ott.platform.domain.model.ContentShelf
 import com.ott.platform.domain.model.RailContentType
 import com.ott.platform.domain.model.ShelfCardStyle
-import kotlinx.coroutines.launch
 
 @Composable
 fun ContentShelfRow(
@@ -146,7 +143,6 @@ private fun DiscoveryDockShelf(
                     shelf = activeTab,
                     onChannelActivate = onChannelActivate,
                     isTv = isTv,
-                    scrollOnFocus = isTv,
                 )
             }
         }
@@ -179,7 +175,7 @@ private fun ThematicShelf(
  * - CMS background (logo) pinned to the left, fully visible
  * - Cards start at 40% of the rail width so they never cover the logo at rest
  * - Card + metadata vertically centered in the main rail panel
- * - Focus lands on the first card; scroll keeps cards fully on-screen
+ * - Focus restores last focused card in the rail (focusRestorer); first card on first entry
  */
 @Composable
 private fun ThematicShelfBody(
@@ -220,10 +216,7 @@ private fun ThematicShelfBody(
             .padding(horizontal = horizontal)
             .height(railHeight)
             .focusGroup()
-            .focusProperties {
-                // Entering this rail from above/below focuses the first card.
-                onEnter = { firstCardFocus.requestFocus() }
-            }
+            .focusRestorer()
             .testTag("thematic_container_${shelf.id}"),
     ) {
         // 40% of the full rail width reserved for CMS brand / logo artwork.
@@ -284,7 +277,6 @@ private fun ThematicShelfBody(
                     bottom = 0.dp,
                 ),
                 fillWidth = true,
-                scrollOnFocus = true,
                 firstItemFocusRequester = firstCardFocus,
             )
         }
@@ -302,6 +294,8 @@ private fun StandardShelf(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .focusGroup()
+            .focusRestorer()
             .testTag("shelf_${shelf.id}"),
     ) {
         Text(
@@ -315,7 +309,6 @@ private fun StandardShelf(
             shelf = shelf,
             onChannelActivate = onChannelActivate,
             isTv = isTv,
-            scrollOnFocus = isTv,
         )
     }
 }
@@ -344,7 +337,6 @@ private fun ShelfItemsRow(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues? = null,
     fillWidth: Boolean = true,
-    scrollOnFocus: Boolean = false,
     listState: LazyListState = rememberLazyListState(),
     firstItemFocusRequester: FocusRequester? = null,
 ) {
@@ -358,14 +350,15 @@ private fun ShelfItemsRow(
     val padding = contentPadding ?: PaddingValues(
         start = horizontal,
         end = horizontal,
-        // Extra bottom room so title/subtitle + focus ring aren't clipped by the next shelf.
+        // Room for title/subtitle under the poster inside the LazyColumn item.
         top = if (isTv) 16.dp else 8.dp,
         bottom = if (isTv) 28.dp else 16.dp,
     )
-    val scope = rememberCoroutineScope()
+    // Horizontal scroll is owned solely by ChannelCard bringIntoView — no animateScrollToItem.
     val rowModifier = modifier
         .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
         .focusGroup()
+        .focusRestorer()
 
     if (shelf.items.isEmpty()) {
         Box(
@@ -381,21 +374,6 @@ private fun ShelfItemsRow(
             )
         }
         return
-    }
-
-    fun onCardFocused(index: Int) {
-        if (!scrollOnFocus) return
-        scope.launch {
-            // Keep the focused card fully inside the horizontal viewport (first & last inclusive).
-            val info = listState.layoutInfo
-            val item = info.visibleItemsInfo.firstOrNull { it.index == index }
-            val fullyVisible = item != null &&
-                item.offset >= info.viewportStartOffset &&
-                item.offset + item.size <= info.viewportEndOffset
-            if (!fullyVisible) {
-                listState.animateScrollToItem(index)
-            }
-        }
     }
 
     if (shelf.contentType == RailContentType.Grid && shelf.items.size >= 4) {
@@ -417,17 +395,13 @@ private fun ShelfItemsRow(
                             contentType = shelf.contentType,
                             rawDisplayType = shelf.rawDisplayType,
                             isTv = isTv,
-                            modifier = Modifier
-                                .then(
-                                    if (isFirst && firstItemFocusRequester != null) {
-                                        Modifier.focusRequester(firstItemFocusRequester)
-                                    } else {
-                                        Modifier
-                                    },
-                                )
-                                .onFocusChanged { state ->
-                                    if (state.isFocused) onCardFocused(colIndex)
+                            modifier = Modifier.then(
+                                if (isFirst && firstItemFocusRequester != null) {
+                                    Modifier.focusRequester(firstItemFocusRequester)
+                                } else {
+                                    Modifier
                                 },
+                            ),
                         )
                     }
                 }
@@ -449,17 +423,13 @@ private fun ShelfItemsRow(
                     rawDisplayType = shelf.rawDisplayType,
                     rank = if (shelf.contentType == RailContentType.Top10) index + 1 else null,
                     isTv = isTv,
-                    modifier = Modifier
-                        .then(
-                            if (index == 0 && firstItemFocusRequester != null) {
-                                Modifier.focusRequester(firstItemFocusRequester)
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .onFocusChanged { state ->
-                            if (state.isFocused) onCardFocused(index)
+                    modifier = Modifier.then(
+                        if (index == 0 && firstItemFocusRequester != null) {
+                            Modifier.focusRequester(firstItemFocusRequester)
+                        } else {
+                            Modifier
                         },
+                    ),
                 )
             }
         }

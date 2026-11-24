@@ -3,17 +3,22 @@ package com.ott.platform.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -22,10 +27,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -35,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.ott.platform.designsystem.OttColors
 import com.ott.platform.designsystem.OttDimens
 import com.ott.platform.domain.model.AppMenuItem
+import kotlinx.coroutines.launch
 
 data class OttMenuItem(
     val id: String,
@@ -61,10 +69,13 @@ fun OttTopMenu(
     onSearchClick: (() -> Unit)? = null,
 ) {
     val horizontal = if (isTv) OttDimens.ScreenPadding else OttDimens.PhoneScreenPadding
+    val tabsState = rememberLazyListState()
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(OttColors.Background)
+            .focusGroup()
+            .focusRestorer()
             .padding(horizontal = horizontal, vertical = if (isTv) 16.dp else 10.dp)
             .testTag("ott_top_menu"),
         verticalAlignment = Alignment.CenterVertically,
@@ -78,14 +89,17 @@ fun OttTopMenu(
             modifier = Modifier.testTag("ott_brand"),
         )
         Spacer(Modifier.width(12.dp))
-        Row(
+        LazyRow(
+            state = tabsState,
             modifier = Modifier
                 .weight(1f)
-                .horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
+                .focusGroup()
+                .focusRestorer(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items.forEach { item ->
+            items(items, key = { it.id }) { item ->
                 GoogleTvTab(
                     item = item,
                     selected = item.id == selectedId,
@@ -129,6 +143,8 @@ private fun GoogleTvTab(
     var focused by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(50)
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
     val iconUrl = when {
         focused && !item.focusedIconUrl.isNullOrBlank() -> item.focusedIconUrl
         selected && !item.selectedIconUrl.isNullOrBlank() -> item.selectedIconUrl
@@ -136,7 +152,13 @@ private fun GoogleTvTab(
     }
     Row(
         modifier = modifier
-            .onFocusChanged { focused = it.isFocused }
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onFocusChanged { state ->
+                focused = state.isFocused
+                if (state.isFocused) {
+                    scope.launch { bringIntoViewRequester.bringIntoView() }
+                }
+            }
             .clip(shape)
             .background(if (focused) OttColors.Focus else Color.Transparent, shape)
             .then(

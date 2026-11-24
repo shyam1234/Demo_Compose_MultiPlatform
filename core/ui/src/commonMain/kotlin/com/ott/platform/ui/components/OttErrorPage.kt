@@ -21,8 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -43,11 +41,8 @@ fun OttErrorPage(
     compact: Boolean = false,
 ) {
     val focusRequester = remember { FocusRequester() }
-    val inputModeManager = LocalInputModeManager.current
     LaunchedEffect(Unit) {
-        if (inputModeManager.inputMode == InputMode.Keyboard) {
-            runCatching { focusRequester.requestFocus() }
-        }
+        runCatching { focusRequester.requestFocus() }
     }
 
     Box(

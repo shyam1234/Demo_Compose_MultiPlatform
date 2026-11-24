@@ -39,9 +39,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -116,13 +114,10 @@ fun DetailsScreen(
                 )
             }
             val canPlay = channel.isPlayable || !channel.trailerUrl.isNullOrBlank()
-            val inputModeManager = LocalInputModeManager.current
             val primaryFocusRequester = remember { FocusRequester() }
 
             LaunchedEffect(channel.id) {
-                if (inputModeManager.inputMode == InputMode.Keyboard) {
-                    runCatching { primaryFocusRequester.requestFocus() }
-                }
+                runCatching { primaryFocusRequester.requestFocus() }
             }
 
             Column(

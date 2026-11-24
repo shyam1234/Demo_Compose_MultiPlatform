@@ -39,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -116,6 +118,7 @@ fun PlayerScreen(
 
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionEpoch by remember { mutableIntStateOf(0) }
+    val playFocusRequester = remember { FocusRequester() }
 
     fun revealControls() {
         controlsVisible = true
@@ -140,6 +143,13 @@ fun PlayerScreen(
 
     val showChrome = controlsVisible || keepControlsPinned
 
+    // When chrome appears, land focus on Play so D-pad Left/Right move among transport.
+    LaunchedEffect(showChrome, status) {
+        if (showChrome && status != PlayerStatus.Error) {
+            runCatching { playFocusRequester.requestFocus() }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -152,15 +162,18 @@ fun PlayerScreen(
                         onToggle()
                         true
                     }
+                    // Seek only when chrome is hidden — otherwise Left/Right move focus.
                     Key.DirectionLeft -> {
+                        if (showChrome) return@onKeyEvent false
                         seekBy(-SkipMs)
                         true
                     }
                     Key.DirectionRight -> {
+                        if (showChrome) return@onKeyEvent false
                         seekBy(SkipMs)
                         true
                     }
-                    Key.Escape, Key.Backspace -> {
+                    Key.Escape, Key.Backspace, Key.Back -> {
                         onBack()
                         true
                     }
@@ -278,6 +291,7 @@ fun PlayerScreen(
                     filled = true,
                     focusedRing = isTv,
                     testTag = "player_toggle",
+                    modifier = Modifier.focusRequester(playFocusRequester),
                 ) {
                     if (isPlaying) {
                         PauseGlyph(color = Color.White)
