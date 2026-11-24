@@ -18,11 +18,11 @@ import org.koin.dsl.module
 class OttAndroidApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Must run before BrandConfigLoader.toCmsConfig() so tablets resolve as androidtv.
+        // Must run before BrandConfigLoader.toCmsConfig() so tablets resolve as androidtablet.
         installAndroidCmsDeviceTypeContext(this)
         val customer = runBlocking { BrandConfigLoader.loadActiveCustomer() }
         val brandCms = BrandConfigLoader.toCmsConfig(customer)
-        val platformDefault = platformCmsMenuDeviceType() // androidmobile | androidtv (tablet)
+        val platformDefault = platformCmsMenuDeviceType() // androidmobile | androidtablet
         val customerChoseDevice = !customer.cmsDeviceTypeOverride.isNullOrBlank() ||
             !customer.cmsMenuDeviceType.isNullOrBlank()
         val device = if (customerChoseDevice) {
@@ -38,7 +38,7 @@ class OttAndroidApp : Application() {
                 coreModules() + featureModules() + customerModule(customer) + listOf(
                     androidPlayerModule,
                     module {
-                        // Phone → androidmobile; tablet → androidtv (unless customer config overrides).
+                        // Phone → androidmobile; tablet → androidtablet (unless customer overrides).
                         single {
                             brandCms.copy(
                                 menuDeviceType = device,

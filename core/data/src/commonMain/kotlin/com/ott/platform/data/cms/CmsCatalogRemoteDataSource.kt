@@ -25,19 +25,21 @@ class CmsCatalogRemoteDataSource(
     var effectiveDeviceType: String = config.menuDeviceType
         private set
 
-    /**
-     * Content may be tagged for a fallback catalog (e.g. phone loads `androidtv` menu while
-     * primary is `androidmobile`). Accept any candidate device type for the current form factor.
-     */
-    fun matchesDevice(allowedDevices: List<String>): Boolean {
-        if (config.deviceTypeOptOut) return true
-        val isPhone = CmsDeviceType.sameDevice(
+    private fun isPhoneFormFactor(): Boolean =
+        CmsDeviceType.sameDevice(
             platformCmsMenuFallbackDeviceType(),
             CmsDeviceType.ANDROID_MOBILE,
         )
+
+    /**
+     * Content may be tagged for a fallback catalog (e.g. phone loads `androidtv` menu while
+     * primary is `iosmobile` / `androidmobile`). Accept any candidate for the form factor.
+     */
+    fun matchesDevice(allowedDevices: List<String>): Boolean {
+        if (config.deviceTypeOptOut) return true
         val candidates = CmsDeviceType.menuDeviceTypeCandidates(
             primary = effectiveDeviceType,
-            isPhone = isPhone,
+            isPhone = isPhoneFormFactor(),
         )
         return candidates.any { CmsDeviceType.matches(allowedDevices, it) }
     }
@@ -49,17 +51,11 @@ class CmsCatalogRemoteDataSource(
     }
 
     /**
-     * When serving a cached menu without re-running [fetchMenu], phones must still accept
-     * `androidtv`-tagged rails (mobile CMS menu is often empty / stub-only).
+     * When serving a cached menu without re-running [fetchMenu], keep the platform primary
+     * device type. [matchesDevice] still accepts fallback candidates (e.g. androidtv).
      */
     fun alignEffectiveDeviceTypeForCachedCatalog() {
-        val isPhone = CmsDeviceType.sameDevice(
-            platformCmsMenuFallbackDeviceType(),
-            CmsDeviceType.ANDROID_MOBILE,
-        )
-        if (isPhone) {
-            effectiveDeviceType = CmsDeviceType.ANDROID_TV
-        }
+        effectiveDeviceType = platformCmsMenuDeviceType().ifBlank { config.menuDeviceType }
     }
 
     /**
@@ -73,21 +69,15 @@ class CmsCatalogRemoteDataSource(
 
     /**
      * Loads the CMS menu, trying [deviceType] then platform fallbacks until a non-empty menu
-     * is returned. Phones always include [CmsDeviceType.ANDROID_MOBILE], then [CmsDeviceType.ANDROID_TV]
-     * if the mobile menu exists but has no L1 items (current iPhone CMS gap).
+     * is returned. Phones: primary → androidmobile → androidtv. Others: primary → androidtv.
      */
     suspend fun fetchMenu(
         deviceType: String = config.menuDeviceType,
         languageCode: String = config.langCode,
     ): List<AppMenuItem> {
-        val phoneFallback = CmsDeviceType.ANDROID_MOBILE
-        val isPhone = CmsDeviceType.sameDevice(
-            platformCmsMenuFallbackDeviceType(),
-            phoneFallback,
-        )
         val candidates = CmsDeviceType.menuDeviceTypeCandidates(
             primary = deviceType,
-            isPhone = isPhone,
+            isPhone = isPhoneFormFactor(),
         )
         var lastError: Throwable? = null
         for ((index, candidate) in candidates.withIndex()) {
@@ -163,19 +153,11 @@ class CmsCatalogRemoteDataSource(
         val dto = OttJson.instance.decodeFromString<CmsRailsResponseDto>(body)
         val railDto = dto.results.firstOrNull()
             ?: error("CMS rail $railId returned empty results")
-        // Prefer TV image variants when phone catalog fell back to androidtv.
-        val mappingDevice = if (
-            CmsDeviceType.sameDevice(platformCmsMenuFallbackDeviceType(), CmsDeviceType.ANDROID_MOBILE)
-        ) {
-            CmsDeviceType.ANDROID_TV
-        } else {
-            effectiveDeviceType
-        }
         val rail = CmsCatalogMapper.mapRail(
             dto = railDto,
             fallbackRailId = railId,
             baseUrl = config.baseUrl,
-            deviceType = mappingDevice,
+            deviceType = effectiveDeviceType,
             fallbackStreamUrl = config.defaultPlaybackUrl,
         )
         requireDeviceMatchOrThrow(rail.deviceTypes, "CMS rail $railId")

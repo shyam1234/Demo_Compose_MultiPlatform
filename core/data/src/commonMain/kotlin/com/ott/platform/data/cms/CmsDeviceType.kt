@@ -3,7 +3,14 @@ package com.ott.platform.data.cms
 /**
  * CMS `devicetype` matching helpers.
  *
- * Payloads use values like `web`, `androidtv`, `atv_ott`, and image-level `All`.
+ * Canonical values:
+ * - Android TV: [ANDROID_TV] / [ATV_OTT]
+ * - Android phone: [ANDROID_MOBILE]
+ * - Android tablet: [ANDROID_TABLET]
+ * - iPhone: [IOS_MOBILE]
+ * - iPad: [IOS_TABLET]
+ * - Web: [WEB]
+ *
  * Matching is case-insensitive and treats blank / missing lists as "all devices".
  */
 object CmsDeviceType {
@@ -11,10 +18,12 @@ object CmsDeviceType {
     const val WEB = "web"
     const val ANDROID_TV = "androidtv"
     const val ATV_OTT = "atv_ott"
-    const val ANDROID = "android"
-    /** Phone menu/content fallback when the primary phone deviceType menu is missing. */
+    const val ANDROID = "android" // legacy phone alias
     const val ANDROID_MOBILE = "androidmobile"
-    const val IOS = "ios"
+    const val ANDROID_TABLET = "androidtablet"
+    const val IOS = "ios" // legacy phone alias
+    const val IOS_MOBILE = "iosmobile"
+    const val IOS_TABLET = "iostablet"
     const val DESKTOP = "desktop"
 
     fun normalize(raw: String?): String =
@@ -22,6 +31,26 @@ object CmsDeviceType {
 
     fun sameDevice(a: String, b: String): Boolean =
         normalize(a) == normalize(b)
+
+    fun isPhoneDeviceType(deviceType: String): Boolean {
+        val n = normalize(deviceType)
+        return n in setOf(
+            normalize(ANDROID_MOBILE),
+            normalize(ANDROID),
+            normalize(IOS_MOBILE),
+            normalize(IOS),
+        )
+    }
+
+    fun isTabletDeviceType(deviceType: String): Boolean {
+        val n = normalize(deviceType)
+        return n in setOf(normalize(ANDROID_TABLET), normalize(IOS_TABLET))
+    }
+
+    fun isTvDeviceType(deviceType: String): Boolean {
+        val n = normalize(deviceType)
+        return n in setOf(normalize(ANDROID_TV), normalize(ATV_OTT))
+    }
 
     /**
      * Menu API fallback `devicetype` when the primary request errors / is empty.
@@ -33,7 +62,7 @@ object CmsDeviceType {
     /**
      * Ordered menu `devicetype` candidates to try until a non-empty menu is returned.
      *
-     * Phones: primary → [ANDROID_MOBILE] → [ANDROID_TV] (last resort when mobile menu has no L1 items).
+     * Phones: primary → [ANDROID_MOBILE] → [ANDROID_TV] (last resort).
      * Other form factors: primary → [ANDROID_TV].
      */
     fun menuDeviceTypeCandidates(primary: String, isPhone: Boolean): List<String> {
@@ -63,14 +92,21 @@ object CmsDeviceType {
         normalize(ANDROID_TV), normalize(ATV_OTT) -> setOf(
             normalize(ANDROID_TV),
             normalize(ATV_OTT),
-            "androidtv",
-            "atvott",
         )
-        normalize(WEB), normalize(DESKTOP) -> setOf(normalize(WEB), normalize(DESKTOP))
+        normalize(WEB), normalize(DESKTOP) -> setOf(
+            normalize(WEB),
+            normalize(DESKTOP),
+        )
         normalize(ANDROID), normalize(ANDROID_MOBILE) -> setOf(
             normalize(ANDROID),
             normalize(ANDROID_MOBILE),
         )
+        normalize(IOS), normalize(IOS_MOBILE) -> setOf(
+            normalize(IOS),
+            normalize(IOS_MOBILE),
+        )
+        normalize(ANDROID_TABLET) -> setOf(normalize(ANDROID_TABLET))
+        normalize(IOS_TABLET) -> setOf(normalize(IOS_TABLET))
         else -> setOf(normalizedDevice)
     }
 

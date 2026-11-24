@@ -433,8 +433,16 @@ class CmsCatalogMapperTest {
             CmsDeviceType.menuDeviceTypeCandidates(CmsDeviceType.ANDROID_MOBILE, isPhone = true),
         )
         assertEquals(
-            listOf("ios", CmsDeviceType.ANDROID_MOBILE, CmsDeviceType.ANDROID_TV),
-            CmsDeviceType.menuDeviceTypeCandidates("ios", isPhone = true),
+            listOf(CmsDeviceType.IOS_MOBILE, CmsDeviceType.ANDROID_MOBILE, CmsDeviceType.ANDROID_TV),
+            CmsDeviceType.menuDeviceTypeCandidates(CmsDeviceType.IOS_MOBILE, isPhone = true),
+        )
+        assertEquals(
+            listOf(CmsDeviceType.ANDROID_TABLET, CmsDeviceType.ANDROID_TV),
+            CmsDeviceType.menuDeviceTypeCandidates(CmsDeviceType.ANDROID_TABLET, isPhone = false),
+        )
+        assertEquals(
+            listOf(CmsDeviceType.IOS_TABLET, CmsDeviceType.ANDROID_TV),
+            CmsDeviceType.menuDeviceTypeCandidates(CmsDeviceType.IOS_TABLET, isPhone = false),
         )
         assertEquals(
             listOf("web", CmsDeviceType.ANDROID_TV),
@@ -442,5 +450,10 @@ class CmsCatalogMapperTest {
         )
         assertTrue(CmsDeviceType.matches(listOf("android"), CmsDeviceType.ANDROID_MOBILE))
         assertTrue(CmsDeviceType.matches(listOf(CmsDeviceType.ANDROID_MOBILE), "android"))
+        assertTrue(CmsDeviceType.matches(listOf("ios"), CmsDeviceType.IOS_MOBILE))
+        assertTrue(CmsDeviceType.matches(listOf(CmsDeviceType.ATV_OTT), CmsDeviceType.ANDROID_TV))
+        assertTrue(CmsDeviceType.isPhoneDeviceType(CmsDeviceType.IOS_MOBILE))
+        assertTrue(CmsDeviceType.isTabletDeviceType(CmsDeviceType.ANDROID_TABLET))
+        assertTrue(CmsDeviceType.isTvDeviceType(CmsDeviceType.ATV_OTT))
     }
 }

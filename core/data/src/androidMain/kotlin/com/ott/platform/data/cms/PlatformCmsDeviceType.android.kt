@@ -5,11 +5,11 @@ import android.content.Context
 
 /**
  * Resolves CMS `devicetype` for Android:
- * - tablets (`smallestScreenWidthDp >= 600`) → [CmsDeviceType.ANDROID_TV]
+ * - tablets (`smallestScreenWidthDp >= 600`) → [CmsDeviceType.ANDROID_TABLET]
  * - phones → [CmsDeviceType.ANDROID_MOBILE]
  *
  * Call [installAndroidCmsDeviceTypeContext] from `Application.onCreate` before reading CMS config.
- * The TV app still overrides to [CmsDeviceType.ANDROID_TV] explicitly.
+ * The TV app still overrides to [CmsDeviceType.ANDROID_TV] / [CmsDeviceType.ATV_OTT] explicitly.
  */
 @SuppressLint("StaticFieldLeak") // Application context only.
 private var androidCmsAppContext: Context? = null
@@ -31,8 +31,7 @@ private fun isAndroidPhoneFormFactor(): Boolean =
     androidSmallestWidthDp() < TABLET_SMALLEST_WIDTH_DP
 
 actual fun platformCmsMenuDeviceType(): String =
-    if (isAndroidPhoneFormFactor()) CmsDeviceType.ANDROID_MOBILE else CmsDeviceType.ANDROID_TV
+    if (isAndroidPhoneFormFactor()) CmsDeviceType.ANDROID_MOBILE else CmsDeviceType.ANDROID_TABLET
 
 actual fun platformCmsMenuFallbackDeviceType(): String =
     CmsDeviceType.menuFallbackDeviceType(isPhone = isAndroidPhoneFormFactor())
-

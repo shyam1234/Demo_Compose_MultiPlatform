@@ -27,10 +27,13 @@ class OttTvApp : Application() {
                 coreModules() + featureModules() + customerModule(customer) + listOf(
                     androidPlayerModule,
                     module {
-                        // TV always targets androidtv unless customer forces an override.
-                        val device = brandCms.menuDeviceType.takeIf {
-                            it.isNotBlank() && it != CmsDeviceType.ANDROID
-                        } ?: CmsDeviceType.ANDROID_TV
+                        // TV always targets androidtv (or atv_ott if customer config says so).
+                        val raw = brandCms.menuDeviceType
+                        val device = when {
+                            CmsDeviceType.sameDevice(raw, CmsDeviceType.ATV_OTT) -> CmsDeviceType.ATV_OTT
+                            CmsDeviceType.sameDevice(raw, CmsDeviceType.ANDROID_TV) -> CmsDeviceType.ANDROID_TV
+                            else -> CmsDeviceType.ANDROID_TV
+                        }
                         single {
                             brandCms.copy(
                                 menuDeviceType = device,
