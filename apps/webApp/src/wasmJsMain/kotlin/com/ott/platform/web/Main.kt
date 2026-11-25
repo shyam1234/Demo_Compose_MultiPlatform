@@ -26,7 +26,10 @@ fun main() {
         ComposeViewport(container) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val isWideScreen = maxWidth >= 840.dp
-                OttApp(isTv = isWideScreen)
+                // Top CMS menu on wide viewports; keyboard nav is web-only via WebKeyboardHost.
+                WebKeyboardHost {
+                    OttApp(isTv = isWideScreen)
+                }
             }
         }
     }

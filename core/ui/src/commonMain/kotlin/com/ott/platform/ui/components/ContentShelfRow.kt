@@ -33,6 +33,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -197,8 +198,10 @@ private fun ThematicShelfBody(
         ShelfCardStyle.Landscape -> if (isTv) OttDimens.TvCardHeight else OttDimens.CardHeight
     }
     // Fixed panel height > card+metadata so the row can be truly vertically centered.
+    // focusInset matches ChannelCard focusHalo so the rail never clips the ring.
     val verticalInset = if (isTv) 32.dp else 20.dp
-    val railHeight = cardHeight + OttDimens.CardTitleHeight + verticalInset * 2
+    val focusInset = if (isTv) 16.dp else 12.dp
+    val railHeight = cardHeight + OttDimens.CardTitleHeight + verticalInset * 2 + focusInset * 2
 
     if (showTitle) {
         ShelfTitle(
@@ -215,6 +218,7 @@ private fun ThematicShelfBody(
             .fillMaxWidth()
             .padding(horizontal = horizontal)
             .height(railHeight)
+            .graphicsLayer { clip = false }
             .focusGroup()
             .focusRestorer()
             .testTag("thematic_container_${shelf.id}"),
@@ -223,10 +227,11 @@ private fun ThematicShelfBody(
         val logoGutter = maxWidth * OttDimens.ThematicCardStartFraction
         val cardStartGap = if (isTv) 16.dp else 10.dp
 
-        // Background panel fills the fixed rail height.
+        // Background panel only — clip the artwork, not the focus highlights on cards.
         Box(
             modifier = Modifier
                 .matchParentSize()
+                .padding(vertical = focusInset)
                 .clip(containerShape)
                 .background(Color(0xFF0B2748).copy(alpha = 0.92f)),
         ) {
@@ -257,12 +262,13 @@ private fun ThematicShelfBody(
             )
         }
 
-        // Card + title/year block centered vertically in the rail.
+        // Card + title/year block centered vertically; no clip so focus ring stays visible.
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .fillMaxWidth()
-                .padding(start = logoGutter),
+                .padding(start = logoGutter)
+                .graphicsLayer { clip = false },
             contentAlignment = Alignment.CenterStart,
         ) {
             ShelfItemsRow(
@@ -272,9 +278,9 @@ private fun ThematicShelfBody(
                 listState = listState,
                 contentPadding = PaddingValues(
                     start = cardStartGap,
-                    end = innerPad,
-                    top = 0.dp,
-                    bottom = 0.dp,
+                    end = innerPad + if (isTv) 12.dp else 8.dp,
+                    top = focusInset,
+                    bottom = focusInset,
                 ),
                 fillWidth = true,
                 firstItemFocusRequester = firstCardFocus,
@@ -349,14 +355,16 @@ private fun ShelfItemsRow(
     }
     val padding = contentPadding ?: PaddingValues(
         start = horizontal,
-        end = horizontal,
-        // Room for title/subtitle under the poster inside the LazyColumn item.
-        top = if (isTv) 16.dp else 8.dp,
-        bottom = if (isTv) 28.dp else 16.dp,
+        // Extra end inset so the last card isn't clipped at the viewport edge.
+        end = horizontal + if (isTv) 24.dp else 12.dp,
+        // Extra room so focused scale + title/subtitle are not clipped by LazyColumn/LazyRow.
+        top = if (isTv) 22.dp else 10.dp,
+        bottom = if (isTv) 40.dp else 22.dp,
     )
     // Horizontal scroll is owned solely by ChannelCard bringIntoView — no animateScrollToItem.
     val rowModifier = modifier
         .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
+        .graphicsLayer { clip = false }
         .focusGroup()
         .focusRestorer()
 

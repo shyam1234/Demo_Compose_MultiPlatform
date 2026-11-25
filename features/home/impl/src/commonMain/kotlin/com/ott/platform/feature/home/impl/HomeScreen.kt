@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -140,14 +141,15 @@ fun HomeScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer { clip = false }
                         .focusGroup()
                         .focusRestorer()
                         .testTag("home_feed"),
                     // Real list insets only (chrome + last-item breathing room) — focus
                     // bring-into-view owns visibility, not oversized padding hacks.
                     contentPadding = PaddingValues(
-                        top = if (isTv) 12.dp else 8.dp,
-                        bottom = if (isTv) 72.dp else 64.dp,
+                        top = if (isTv) 16.dp else 8.dp,
+                        bottom = if (isTv) 80.dp else 64.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(
                         if (isTv) OttDimens.ShelfSpacing else OttDimens.PhoneShelfSpacing,

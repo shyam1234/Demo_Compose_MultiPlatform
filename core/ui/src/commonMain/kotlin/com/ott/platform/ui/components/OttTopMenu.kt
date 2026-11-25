@@ -45,8 +45,14 @@ import com.ott.platform.domain.model.AppMenuItem
 import kotlinx.coroutines.launch
 
 data class OttMenuItem(
+    /** Unique LazyList / test key (CMS menuL1Id). Must be unique even when layouts are shared. */
     val id: String,
     val label: String,
+    /**
+     * Navigation destination (`home`, `layout/{id}`, `search`, …).
+     * May repeat across tabs when CMS points multiple L1 items at the same layout.
+     */
+    val route: String = id,
     val iconUrl: String? = null,
     val selectedIconUrl: String? = null,
     val focusedIconUrl: String? = null,
@@ -74,8 +80,6 @@ fun OttTopMenu(
         modifier = modifier
             .fillMaxWidth()
             .background(OttColors.Background)
-            .focusGroup()
-            .focusRestorer()
             .padding(horizontal = horizontal, vertical = if (isTv) 16.dp else 10.dp)
             .testTag("ott_top_menu"),
         verticalAlignment = Alignment.CenterVertically,
@@ -89,6 +93,7 @@ fun OttTopMenu(
             modifier = Modifier.testTag("ott_brand"),
         )
         Spacer(Modifier.width(12.dp))
+        // Single focusGroup/restorer — nested restorers caused double menu chrome on web.
         LazyRow(
             state = tabsState,
             modifier = Modifier
@@ -96,7 +101,7 @@ fun OttTopMenu(
                 .focusGroup()
                 .focusRestorer(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(end = 8.dp),
+            contentPadding = PaddingValues(end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items(items, key = { it.id }) { item ->
@@ -150,6 +155,12 @@ private fun GoogleTvTab(
         selected && !item.selectedIconUrl.isNullOrBlank() -> item.selectedIconUrl
         else -> item.iconUrl
     }
+    // One highlight only: focus = solid fill; selected (idle) = soft fill — never both rings.
+    val tabBackground = when {
+        focused -> OttColors.Focus
+        selected -> OttColors.Focus.copy(alpha = 0.32f)
+        else -> Color.Transparent
+    }
     Row(
         modifier = modifier
             .bringIntoViewRequester(bringIntoViewRequester)
@@ -160,14 +171,7 @@ private fun GoogleTvTab(
                 }
             }
             .clip(shape)
-            .background(if (focused) OttColors.Focus else Color.Transparent, shape)
-            .then(
-                if (selected && !focused) {
-                    Modifier.border(2.dp, OttColors.Focus, shape)
-                } else {
-                    Modifier
-                },
-            )
+            .background(tabBackground, shape)
             .clickable(
                 interactionSource = interaction,
                 indication = null,

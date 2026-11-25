@@ -106,6 +106,8 @@ fun ChannelCard(
     var hasFocus by remember { mutableStateOf(false) }
     val isFocused = focused || hasFocus
     val ringGap = 3.dp
+    // Keep ring + TV focus scale inside layout bounds — LazyRow clips item overflow.
+    val focusHalo = if (isTv) 12.dp else 8.dp
     val shape = RoundedCornerShape(OttDimens.CardCorner)
     val outerShape = RoundedCornerShape(OttDimens.CardCorner + 2.dp)
     val interaction = remember { MutableInteractionSource() }
@@ -138,28 +140,24 @@ fun ChannelCard(
             .testTag("channel_card_${channel.id.value}"),
         horizontalAlignment = Alignment.Start,
     ) {
+        // Poster + focus ring as siblings so clip(shape) never eats the border, and both
+        // stay inside the layout slot (LazyRow clips any overflow of the item).
         Box(
             modifier = Modifier
                 .width(width)
-                .height(height)
-                // Scale only the poster — not the metadata — so titles aren't clipped by the feed.
-                .graphicsLayer {
-                    val scale = if (isTv && isFocused) 1.04f else 1f
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .then(
-                    if (isFocused) {
-                        Modifier.border(OttDimens.FocusBorder, OttColors.Focus, outerShape)
-                    } else {
-                        Modifier
-                    },
-                )
-                .padding(if (isFocused) ringGap else 0.dp),
+                .height(height),
         ) {
+            val contentInset = focusHalo + if (isFocused) ringGap else 0.dp
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(contentInset)
+                    .graphicsLayer {
+                        val scale = if (isTv && isFocused) 1.03f else 1f
+                        scaleX = scale
+                        scaleY = scale
+                        clip = false
+                    }
                     .clip(shape)
                     .background(OttColors.SurfaceElevated),
             ) {
@@ -210,6 +208,14 @@ fun ChannelCard(
                     )
                 }
             }
+            if (isFocused) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(focusHalo)
+                        .border(OttDimens.FocusBorder, OttColors.Focus, outerShape),
+                )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -217,7 +223,7 @@ fun ChannelCard(
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White,
             fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.width(width),
         )

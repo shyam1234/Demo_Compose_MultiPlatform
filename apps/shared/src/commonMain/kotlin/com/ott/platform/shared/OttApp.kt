@@ -11,7 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
@@ -75,11 +77,21 @@ fun OttApp(
         }
         val tvTopTabs = cmsNavItems
         val phoneBottomTabs = cmsNavItems
-        val searchMenuItem = cmsNavItems.firstOrNull { it.id == OttRoutes.SEARCH }
+        val searchMenuItem = cmsNavItems.firstOrNull { it.route == OttRoutes.SEARCH }
 
-        val selectedTabId = when (currentRoute) {
+        val selectedTabRoute = when (currentRoute) {
             OttRoutes.LAYOUT -> activeLayoutId?.let(OttRoutes::layout) ?: OttRoutes.HOME
             else -> currentRoute
+        }
+        // Unique menu tab id (not route) — CMS may map multiple L1 items to one layout.
+        var selectedMenuItemId by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(selectedTabRoute, cmsNavItems) {
+            val stillValid = cmsNavItems.any {
+                it.id == selectedMenuItemId && it.route == selectedTabRoute
+            }
+            if (!stillValid) {
+                selectedMenuItemId = cmsNavItems.firstOrNull { it.route == selectedTabRoute }?.id
+            }
         }
         val activeCmsItem: AppMenuItem? = remember(menuState.items, currentRoute, activeLayoutId) {
             when (currentRoute) {
@@ -115,7 +127,8 @@ fun OttApp(
         }
 
         fun navigateToTab(item: OttMenuItem) {
-            navController.navigate(item.id) {
+            selectedMenuItemId = item.id
+            navController.navigate(item.route) {
                 popUpTo(navController.graph.findStartDestination().id) {
                     saveState = true
                 }
@@ -154,7 +167,7 @@ fun OttApp(
                 when {
                     showTvTopMenu -> OttTopMenu(
                         items = tvTopTabs,
-                        selectedId = selectedTabId,
+                        selectedId = selectedMenuItemId,
                         brand = brandName,
                         isTv = true,
                         onItemSelected = ::navigateToTab,
@@ -171,7 +184,7 @@ fun OttApp(
                 if (showPhoneBottomMenu) {
                     OttBottomMenu(
                         items = phoneBottomTabs,
-                        selectedId = selectedTabId,
+                        selectedId = selectedMenuItemId,
                         onItemSelected = ::navigateToTab,
                     )
                 }
@@ -276,13 +289,26 @@ fun OttApp(
 private fun buildCmsNavItems(items: List<AppMenuItem>): List<OttMenuItem> {
     if (items.isEmpty()) return emptyList()
     var firstLayoutAssigned = false
+    // CMS may reuse the same layout across L1 tabs (e.g. web "TV SHOWS" + "Sports").
+    // LazyRow keys must stay unique — use menuL1Id for [OttMenuItem.id], route for nav.
+    val usedKeys = LinkedHashSet<String>()
     return items.mapNotNull { item ->
         val routeId = resolveCmsMenuRoute(item, preferHome = !firstLayoutAssigned) ?: return@mapNotNull null
         if (routeId == OttRoutes.HOME || routeId.startsWith("layout/")) {
             firstLayoutAssigned = true
         }
+        val uniqueKey = item.id.trim().ifBlank { routeId }.let { base ->
+            var key = base
+            var n = 2
+            while (!usedKeys.add(key)) {
+                key = "${base}_$n"
+                n++
+            }
+            key
+        }
         OttMenuItem(
-            id = routeId,
+            id = uniqueKey,
+            route = routeId,
             label = item.title, // exact CMS menuL1Title
             iconUrl = item.defaultIconUrl,
             selectedIconUrl = item.selectedIconUrl,

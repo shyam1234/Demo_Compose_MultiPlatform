@@ -67,20 +67,19 @@
             }
             return null;
         }
-        function focusComposeCanvas() {
+        function prepareComposeCanvas() {
             const canvas = findComposeCanvas(composeRoot);
-            if (canvas && typeof canvas.focus === "function") {
+            if (!canvas) return null;
+            if (!canvas.hasAttribute("tabindex")) {
+                canvas.setAttribute("tabindex", "0");
+            }
+            if (typeof canvas.focus === "function" && document.activeElement !== canvas) {
                 try { canvas.focus({ preventScroll: true }); } catch (_) {}
             }
             return canvas;
         }
-        const observer = new MutationObserver(() => {
-            if (findComposeCanvas(composeRoot)) {
-                focusComposeCanvas();
-            }
-        });
-        observer.observe(composeRoot, { childList: true, subtree: true });
-        window.addEventListener("load", () => setTimeout(focusComposeCanvas, 300));
+        // One delayed focus only — never on every DOM mutation (layout crash).
+        window.addEventListener("load", () => setTimeout(prepareComposeCanvas, 900));
 
         const navKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Escape", "Tab"]);
         function handleWindowKey(e) {
@@ -90,8 +89,10 @@
             if (e.key.startsWith("Arrow")) {
                 e.preventDefault();
             }
-            const canvas = focusComposeCanvas();
-            if (canvas && !(e.composedPath && e.composedPath().includes(canvas))) {
+            const canvas = prepareComposeCanvas();
+            // If the event did not target the canvas, forward it so Compose receives arrows.
+            if (canvas && document.activeElement !== canvas &&
+                !(e.composedPath && e.composedPath().includes(canvas))) {
                 canvas.dispatchEvent(new KeyboardEvent(e.type, {
                     key: e.key,
                     code: e.code,
@@ -106,8 +107,8 @@
                 }));
             }
         }
-        window.addEventListener("keydown", handleWindowKey);
-        window.addEventListener("keyup", handleWindowKey);
+        window.addEventListener("keydown", handleWindowKey, true);
+        window.addEventListener("keyup", handleWindowKey, true);
     })();
 </script>
 
