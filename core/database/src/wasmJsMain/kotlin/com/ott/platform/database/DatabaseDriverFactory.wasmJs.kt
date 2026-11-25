@@ -55,6 +55,7 @@ private data class StoredCategory(
     val contentType: String = "generic",
     val hasBackgroundImage: Boolean = false,
     val backgroundImageUrl: String? = null,
+    val backgroundImageAspectRatio: Float? = null,
     val deviceTypes: List<String> = emptyList(),
 )
 
@@ -96,6 +97,7 @@ private fun Category.toStored() = StoredCategory(
     contentType = contentType,
     hasBackgroundImage = hasBackgroundImage,
     backgroundImageUrl = backgroundImageUrl,
+    backgroundImageAspectRatio = backgroundImageAspectRatio,
     deviceTypes = deviceTypes,
 )
 
@@ -107,6 +109,7 @@ private fun StoredCategory.toDomain() = Category(
     contentType = contentType,
     hasBackgroundImage = hasBackgroundImage,
     backgroundImageUrl = backgroundImageUrl,
+    backgroundImageAspectRatio = backgroundImageAspectRatio,
     deviceTypes = deviceTypes,
 )
 
@@ -218,6 +221,17 @@ private class WebCatalogLocalDataSource : CatalogLocalDataSource {
         }
     }
 
+    override suspend fun deleteLayout(layoutId: String) {
+        mutex.withLock {
+            memoryLayouts.remove(layoutId)
+            persistLayouts()
+        }
+    }
+
+    override suspend fun getAllLayoutIds(): Set<String> = mutex.withLock {
+        memoryLayouts.keys.toSet()
+    }
+
     override suspend fun getCategories(): List<Category> = mutex.withLock {
         memoryCategories.values.map { it.toDomain() }
     }
@@ -246,6 +260,15 @@ private class WebCatalogLocalDataSource : CatalogLocalDataSource {
                 categoriesUpdatedAtMs = Clock.System.now().toEpochMilliseconds()
             }
             persistCategories()
+        }
+    }
+
+    override suspend fun deleteCategoryAndChannels(categoryId: String) {
+        mutex.withLock {
+            memoryCategories.remove(categoryId)
+            memoryShelves.remove(categoryId)
+            persistCategories()
+            persistShelves()
         }
     }
 

@@ -32,6 +32,8 @@ data class Category(
     val hasBackgroundImage: Boolean = false,
     /** CMS `rail_images` URL with imagetype `Rail_Background_Image`. */
     val backgroundImageUrl: String? = null,
+    /** width/height from CMS `rail_images` (0 if unknown). */
+    val backgroundImageAspectRatio: Float? = null,
     /** CMS rail `devicetype` allow-list (empty = all). */
     val deviceTypes: List<String> = emptyList(),
 )
@@ -151,6 +153,8 @@ data class ContentShelf(
     val hasBackgroundImage: Boolean = false,
     /** Resolved URL from CMS `rail_images` with imagetype `Rail_Background_Image`. */
     val backgroundImageUrl: String? = null,
+    /** width/height from CMS background art; drives uncropped thematic panel height. */
+    val backgroundImageAspectRatio: Float? = null,
     /**
      * CMS discovery-dock tabs (`discovery_dock_rail_response` / `discovery_dock_rail_ids`).
      * Each tab is itself a [ContentShelf] whose title is the subtitle tab label.

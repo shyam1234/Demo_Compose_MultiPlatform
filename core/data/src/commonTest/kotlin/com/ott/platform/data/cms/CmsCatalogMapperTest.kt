@@ -272,6 +272,8 @@ class CmsCatalogMapperTest {
             "https://cms.play-cms.com/v1/imageresize/w_1920/h_400/original/%2Fmount%2Fimages%2Frail-bg.png",
             rail.backgroundImageUrl,
         )
+        assertEquals(1840f / 346f, rail.backgroundImageAspectRatio)
+        assertEquals(1840f / 346f, shelf.backgroundImageAspectRatio)
         assertTrue(shelf.isThematic)
         assertEquals(1, shelf.items.size)
 

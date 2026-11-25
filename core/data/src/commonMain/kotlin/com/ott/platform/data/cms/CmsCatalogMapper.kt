@@ -30,6 +30,7 @@ data class CmsRail(
     val items: List<Channel>,
     val hasBackgroundImage: Boolean = false,
     val backgroundImageUrl: String? = null,
+    val backgroundImageAspectRatio: Float? = null,
     val discoveryDockTabs: List<CmsRail> = emptyList(),
     val discoveryDockRailIds: List<String> = emptyList(),
     val deviceTypes: List<String> = emptyList(),
@@ -44,6 +45,7 @@ data class CmsRail(
         rawContentType = rawContentType,
         hasBackgroundImage = hasBackgroundImage,
         backgroundImageUrl = backgroundImageUrl,
+        backgroundImageAspectRatio = backgroundImageAspectRatio,
         discoveryDockTabs = discoveryDockTabs.map { it.toContentShelf(limit = it.items.size) },
         deviceTypes = deviceTypes,
     )
@@ -159,7 +161,9 @@ object CmsCatalogMapper {
                 )
             }
         val backgroundImages = CmsDeviceType.filterImagesForDevice(dto.railImages, deviceType)
-        val backgroundImageUrl = resolveRailBackgroundImageUrl(backgroundImages, baseUrl)
+        val backgroundArt = resolveRailBackgroundArt(backgroundImages, baseUrl)
+        val backgroundImageUrl = backgroundArt?.url
+        val backgroundImageAspectRatio = backgroundArt?.aspectRatio
         // CMS boolean is authoritative; artwork may 502 / be delayed but chrome must still apply.
         val hasBackgroundImage = dto.railBackgroundImage
         val dockIds = dto.discoveryDockRailIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
@@ -205,16 +209,28 @@ object CmsCatalogMapper {
             items = assets,
             hasBackgroundImage = hasBackgroundImage,
             backgroundImageUrl = backgroundImageUrl,
+            backgroundImageAspectRatio = backgroundImageAspectRatio,
             discoveryDockTabs = dockTabs,
             discoveryDockRailIds = dockIds,
             deviceTypes = deviceTypes,
         )
     }
 
+    data class RailBackgroundArt(
+        val url: String,
+        /** width / height from CMS `imagewidth` / `imageheight`, when both > 0. */
+        val aspectRatio: Float? = null,
+    )
+
     fun resolveRailBackgroundImageUrl(
         images: List<CmsAssetImageDto>,
         baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
-    ): String? {
+    ): String? = resolveRailBackgroundArt(images, baseUrl)?.url
+
+    fun resolveRailBackgroundArt(
+        images: List<CmsAssetImageDto>,
+        baseUrl: String = CmsConfig.DEFAULT_BASE_URL,
+    ): RailBackgroundArt? {
         if (images.isEmpty()) return null
         val preferredType = normalizeImageType(ImageTypes.RAIL_BACKGROUND_IMAGE)
         val ordered = images.sortedByDescending { img ->
@@ -223,7 +239,14 @@ object CmsCatalogMapper {
         for (img in ordered) {
             val url = normalizeRailBackgroundUrl(img.imgurl, baseUrl)
                 ?: normalizeRailBackgroundUrl(img.imageurl, baseUrl)
-            if (url != null) return url
+            if (url != null) {
+                val aspect = if (img.imagewidth > 0 && img.imageheight > 0) {
+                    img.imagewidth.toFloat() / img.imageheight.toFloat()
+                } else {
+                    null
+                }
+                return RailBackgroundArt(url = url, aspectRatio = aspect)
+            }
         }
         return null
     }

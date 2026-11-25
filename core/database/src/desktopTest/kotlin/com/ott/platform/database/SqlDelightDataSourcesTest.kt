@@ -148,6 +148,15 @@ class SqlDelightDataSourcesTest {
         assertNotNull(catalogLocal.getChannel(ContentId("m1"))) // still present in rail_2
         assertNull(catalogLocal.getChannel(ContentId("m2")))
         assertNotNull(catalogLocal.getChannel(ContentId("m3")))
+
+        // Deleting a category removes its channels; unrelated rails stay
+        catalogLocal.deleteCategoryAndChannels("rail_2")
+        assertEquals(null, catalogLocal.getCategory("rail_2"))
+        assertEquals(emptyList(), catalogLocal.getChannelsByCategory("rail_2", limit = 10))
+        assertEquals(updatedRail1, catalogLocal.getChannelsByCategory("rail_1", limit = 10))
+        catalogLocal.deleteLayout("6af4302c6368a4cce6863ca6")
+        assertEquals(null, catalogLocal.getLayout("6af4302c6368a4cce6863ca6"))
+        assertEquals(emptySet(), catalogLocal.getAllLayoutIds())
     }
 
     private fun sampleChannel(

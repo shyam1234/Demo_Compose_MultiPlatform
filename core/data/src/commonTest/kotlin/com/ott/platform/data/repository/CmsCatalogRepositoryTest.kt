@@ -243,7 +243,7 @@ class CmsCatalogRepositoryTest {
 
         val callsAfterOnline = networkCalls
 
-        // 2. Fresh repo within TTL reads local DB without network
+        // 2. Online always refreshes from API (DB is offline-only), so a new repo hits network again
         val freshRepo = CmsCatalogRepository(
             remote = remote,
             logger = noOpLogger,
@@ -251,12 +251,12 @@ class CmsCatalogRepositoryTest {
             cacheTtlMs = 60_000L,
             nowMs = { currentTimeMs + 5_000L },
         )
-        val cachedHome = freshRepo.getHomeFeed(limitPerShelf = 10)
-        assertIs<OttResult.Success<HomeFeed>>(cachedHome)
-        assertEquals(2, cachedHome.data.shelves.size)
-        assertEquals(callsAfterOnline, networkCalls)
+        val refreshedHome = freshRepo.getHomeFeed(limitPerShelf = 10)
+        assertIs<OttResult.Success<HomeFeed>>(refreshedHome)
+        assertEquals(2, refreshedHome.data.shelves.size)
+        assertTrue(networkCalls > callsAfterOnline)
 
-        // 3. After TTL expires AND network is offline, falls back to stale DB cache
+        // 3. When offline, fall back to synced DB cache
         isOffline = true
         currentTimeMs += 120_000L
         val offlineRepo = CmsCatalogRepository(
@@ -277,6 +277,131 @@ class CmsCatalogRepositoryTest {
         val offlineSearch = offlineRepo.search("Documentary", limit = 10)
         assertIs<OttResult.Success<List<Channel>>>(offlineSearch)
         assertEquals("Muhammad Ali", offlineSearch.data.single().title)
+    }
+
+    @Test
+    fun `prunes removed menu layouts and rails from local database on API refresh`() = runTest {
+        val local = InMemoryCatalogLocalDataSource()
+        fun sample(id: String, title: String, categoryId: String) = Channel(
+            id = ContentId(id),
+            title = title,
+            logoUrl = null,
+            streamUrl = "https://example.com/$id.m3u8",
+            categoryId = categoryId,
+            categoryName = title,
+        )
+        // Seed stale catalog that CMS will no longer return.
+        local.replaceMenuItems(
+            listOf(
+                AppMenuItem(id = "home", title = "Home", layoutId = "layout_keep"),
+                AppMenuItem(id = "gone", title = "Gone", layoutId = "layout_gone"),
+            ),
+        )
+        local.saveLayout(
+            CachedLayout(id = "layout_keep", name = "Keep", railIds = listOf("rail_keep", "rail_drop")),
+        )
+        local.saveLayout(
+            CachedLayout(id = "layout_gone", name = "Gone", railIds = listOf("rail_gone")),
+        )
+        local.upsertCategory(Category(id = "rail_keep", name = "Keep"), 0)
+        local.upsertCategory(Category(id = "rail_drop", name = "Drop"), 1)
+        local.upsertCategory(Category(id = "rail_gone", name = "Gone"), 2)
+        local.replaceChannelsForCategory("rail_keep", listOf(sample("a1", "Keep", "rail_keep")))
+        local.replaceChannelsForCategory("rail_drop", listOf(sample("a2", "Drop", "rail_drop")))
+        local.replaceChannelsForCategory("rail_gone", listOf(sample("a3", "Gone", "rail_gone")))
+
+        val engine = MockEngine { request ->
+            val url = request.url.toString()
+            when {
+                url.contains("/v1/login") -> respond(
+                    content = """{"refresh":"r","access":"token-1"}""",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+                url.contains("/v1/menu") -> respond(
+                    content = """
+                        {
+                          "count": 1,
+                          "results": [
+                            {
+                              "_id": "grp1",
+                              "publish_now": 1,
+                              "menuL1": [
+                                {
+                                  "menuL1Id": "home",
+                                  "menuL1Title": "Home",
+                                  "menuL1DeeplinkUrl": "http://layouts/layout_keep"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                    """.trimIndent(),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+                url.endsWith("/v1/layouts/layout_keep") -> respond(
+                    content = """
+                        {
+                          "_id": "layout_keep",
+                          "name": "Keep",
+                          "sortrail": ["rail_keep"]
+                        }
+                    """.trimIndent(),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+                url.contains("id=rail_keep") -> respond(
+                    content = """
+                        {
+                          "count": 1,
+                          "results": [
+                            {
+                              "_id": "rail_keep",
+                              "name": "Keep",
+                              "rail_content_type": "new",
+                              "rail_display_type": "Landscape",
+                              "existing_asset": {
+                                "count": 1,
+                                "existing_asset": [
+                                  {
+                                    "asset_id": "a1",
+                                    "title": "Keep",
+                                    "playback_urls": { "hls_url": "https://example.com/a1.m3u8" },
+                                    "images": []
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                    """.trimIndent(),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+                else -> respond(content = "{}", status = HttpStatusCode.NotFound)
+            }
+        }
+
+        val config = CmsConfig()
+        val client = mockHttpClient(engine)
+        val auth = CmsAuthManager(client, noOpLogger, config)
+        val remote = CmsCatalogRemoteDataSource(client, auth, noOpLogger, config)
+        val repo = CmsCatalogRepository(remote = remote, logger = noOpLogger, local = local)
+
+        val menu = repo.getMenu()
+        assertIs<OttResult.Success<List<AppMenuItem>>>(menu)
+        assertEquals(listOf("Home"), menu.data.map { it.title })
+        assertEquals(null, local.getLayout("layout_gone"))
+        assertEquals(null, local.getCategory("rail_gone"))
+        assertEquals(emptyList(), local.getChannelsByCategory("rail_gone", 10))
+
+        val feed = repo.getLayoutFeed("layout_keep", limitPerShelf = 10)
+        assertIs<OttResult.Success<HomeFeed>>(feed)
+        assertEquals(listOf("rail_keep"), local.getLayout("layout_keep")?.railIds)
+        assertEquals(null, local.getCategory("rail_drop"))
+        assertEquals(emptyList(), local.getChannelsByCategory("rail_drop", 10))
+        assertEquals(1, local.getChannelsByCategory("rail_keep", 10).size)
     }
 
     @Test
@@ -450,6 +575,12 @@ class CmsCatalogRepositoryTest {
             layouts[layout.id] = layout.copy(updatedAtMs = time)
         }
 
+        override suspend fun deleteLayout(layoutId: String) {
+            layouts.remove(layoutId)
+        }
+
+        override suspend fun getAllLayoutIds(): Set<String> = layouts.keys.toSet()
+
         override suspend fun getCategories(): List<Category> = categories.values.toList()
         override suspend fun getCategory(categoryId: String): Category? = categories[categoryId]
         override suspend fun getCategoriesUpdatedAtMs(): Long? = categoriesUpdatedAt
@@ -462,6 +593,12 @@ class CmsCatalogRepositoryTest {
         override suspend fun upsertCategory(category: Category, sortOrder: Int) {
             categories[category.id] = category
             if (categoriesUpdatedAt == null) categoriesUpdatedAt = time
+        }
+
+        override suspend fun deleteCategoryAndChannels(categoryId: String) {
+            categories.remove(categoryId)
+            channelsByCategory.remove(categoryId)
+            categoryUpdatedAt.remove(categoryId)
         }
 
         override suspend fun getChannelsByCategory(categoryId: String, limit: Int): List<Channel> =

@@ -24,12 +24,17 @@ interface CatalogLocalDataSource {
 
     suspend fun getLayout(layoutId: String): CachedLayout?
     suspend fun saveLayout(layout: CachedLayout)
+    /** Drop layouts (and optionally their rails) that are no longer in the CMS menu. */
+    suspend fun deleteLayout(layoutId: String)
+    suspend fun getAllLayoutIds(): Set<String>
 
     suspend fun getCategories(): List<Category>
     suspend fun getCategory(categoryId: String): Category?
     suspend fun getCategoriesUpdatedAtMs(): Long?
     suspend fun replaceCategories(categories: List<Category>)
     suspend fun upsertCategory(category: Category, sortOrder: Int = 0)
+    /** Remove a rail's metadata and all of its cached channels. */
+    suspend fun deleteCategoryAndChannels(categoryId: String)
 
     suspend fun getChannelsByCategory(categoryId: String, limit: Int): List<Channel>
     suspend fun getCategoryUpdatedAtMs(categoryId: String): Long?
@@ -98,6 +103,16 @@ class SqlDelightCatalogLocalDataSource(
         }
     }
 
+    override suspend fun deleteLayout(layoutId: String) {
+        withContext(ioDispatcher) {
+            queries.deleteLayoutById(layoutId)
+        }
+    }
+
+    override suspend fun getAllLayoutIds(): Set<String> = withContext(ioDispatcher) {
+        queries.selectAllLayoutIds().executeAsList().toSet()
+    }
+
     override suspend fun getCategories(): List<Category> = withContext(ioDispatcher) {
         queries.selectAllCategories().executeAsList().map { row -> row.toCategory() }
     }
@@ -139,6 +154,15 @@ class SqlDelightCatalogLocalDataSource(
                 sort_order = sortOrder.toLong(),
                 updated_at_ms = nowMs(),
             )
+        }
+    }
+
+    override suspend fun deleteCategoryAndChannels(categoryId: String) {
+        withContext(ioDispatcher) {
+            database.transaction {
+                queries.deleteChannelsByCategory(categoryId)
+                queries.deleteCategoryById(categoryId)
+            }
         }
     }
 
@@ -242,6 +266,7 @@ class SqlDelightCatalogLocalDataSource(
             contentType = rail_content_type,
             hasBackgroundImage = meta.hasBackgroundImage,
             backgroundImageUrl = meta.backgroundImageUrl,
+            backgroundImageAspectRatio = meta.backgroundImageAspectRatio,
             deviceTypes = meta.deviceTypes,
         )
     }
@@ -249,6 +274,7 @@ class SqlDelightCatalogLocalDataSource(
     private fun Category.persistedDescription(): String = encodeCategoryDescription(
         hasBackgroundImage = hasBackgroundImage,
         backgroundImageUrl = backgroundImageUrl,
+        backgroundImageAspectRatio = backgroundImageAspectRatio,
         deviceTypes = deviceTypes,
         note = description,
     )

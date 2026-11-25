@@ -55,19 +55,15 @@ class CmsCatalogRepository(
             cachedMenu?.let { return@withLock it }
 
             val dbMenu = local?.getMenuItems().orEmpty()
-            val dbUpdatedAt = if (dbMenu.isNotEmpty()) local?.getMenuUpdatedAtMs() else null
-            if (dbMenu.isNotEmpty() && isFresh(dbUpdatedAt)) {
-                cachedMenu = dbMenu
-                // Cached menus for phones usually came from the androidtv fallback catalog.
-                remote.alignEffectiveDeviceTypeForCachedCatalog()
-                return@withLock dbMenu
-            }
-
             try {
+                // Always refresh from API when online; DB is offline-only.
                 val fetched = remote.fetchMenu()
                 if (fetched.isNotEmpty()) {
-                    runCatching { local?.replaceMenuItems(fetched) }
-                        .onFailure { logger.w(TAG, "Failed to persist menu: ${it.message}", it) }
+                    runCatching {
+                        val pruned = syncMenuToLocal(fetched)
+                        pruned.layoutIds.forEach { layoutCache.remove(it) }
+                        pruned.railIds.forEach { shelfCache.remove(it) }
+                    }.onFailure { logger.w(TAG, "Failed to persist menu: ${it.message}", it) }
                     cachedMenu = fetched
                     fetched
                 } else if (dbMenu.isNotEmpty()) {
@@ -91,22 +87,26 @@ class CmsCatalogRepository(
     }
 
     override suspend fun getCategories(): OttResult<List<Category>> = runCatchingResult {
-        val dbCategories = local?.getCategories().orEmpty()
-        if (dbCategories.isNotEmpty()) {
-            return@runCatchingResult dbCategories
-        }
-        val feed = when (val home = getHomeFeed()) {
-            is OttResult.Success -> home.data
-            is OttResult.Error -> throw home.cause ?: IllegalStateException(home.message)
-            OttResult.Loading -> HomeFeed()
-        }
-        feed.shelves.map { shelf ->
-            Category(
-                id = shelf.id,
-                name = shelf.title,
-                displayType = shelf.rawDisplayType,
-                contentType = shelf.rawContentType,
-            )
+        // Prefer live feed (network → synced DB) so removed rails disappear when online.
+        when (val home = getHomeFeed()) {
+            is OttResult.Success -> {
+                val fromFeed = home.data.shelves.map { shelf ->
+                    Category(
+                        id = shelf.id,
+                        name = shelf.title,
+                        displayType = shelf.rawDisplayType,
+                        contentType = shelf.rawContentType,
+                    )
+                }
+                if (fromFeed.isNotEmpty()) fromFeed
+                else local?.getCategories().orEmpty()
+            }
+            is OttResult.Error -> {
+                val dbCategories = local?.getCategories().orEmpty()
+                if (dbCategories.isNotEmpty()) dbCategories
+                else throw home.cause ?: IllegalStateException(home.message)
+            }
+            OttResult.Loading -> local?.getCategories().orEmpty()
         }
     }
 
@@ -234,29 +234,14 @@ class CmsCatalogRepository(
         }
 
         val dbLayout = local?.getLayout(layoutId)
-        if (dbLayout != null && dbLayout.railIds.isNotEmpty() && isFresh(dbLayout.updatedAtMs)) {
-            val layout = CmsLayout(
-                id = dbLayout.id,
-                name = dbLayout.name,
-                themeUrl = dbLayout.themeUrl,
-                railIds = dbLayout.railIds,
-            )
-            mutex.withLock { layoutCache[layoutId] = layout }
-            return layout
-        }
-
         return try {
+            // Always refresh from API when online; DB is offline-only.
             val fetched = remote.fetchLayout(layoutId)
             runCatching {
-                local?.saveLayout(
-                    CachedLayout(
-                        id = fetched.id,
-                        name = fetched.name,
-                        themeUrl = fetched.themeUrl,
-                        railIds = fetched.railIds,
-                        updatedAtMs = nowMs(),
-                    ),
-                )
+                val pruned = syncLayoutToLocal(fetched)
+                mutex.withLock {
+                    pruned.railIds.forEach { shelfCache.remove(it) }
+                }
             }.onFailure { logger.w(TAG, "Failed to persist layout $layoutId: ${it.message}", it) }
             mutex.withLock { layoutCache[layoutId] = fetched }
             fetched
@@ -287,14 +272,9 @@ class CmsCatalogRepository(
         val fetchLimit = limit.coerceAtLeast(DEFAULT_RAIL_FETCH_LIMIT)
         val dbCategory = local?.getCategory(railId)
         val dbItems = local?.getChannelsByCategory(railId, fetchLimit).orEmpty()
-        val dbUpdatedAt = if (dbItems.isNotEmpty()) local?.getCategoryUpdatedAtMs(railId) else null
-        if (dbItems.isNotEmpty() && isFresh(dbUpdatedAt)) {
-            val shelf = buildShelfFromDb(railId, dbCategory, dbItems)
-            cacheShelfInMemory(railId, shelf)
-            return shelf.copy(items = shelf.items.take(limit))
-        }
 
         return try {
+            // Always refresh from API when online; replace local rail contents so removals stick.
             val fetchedRail: CmsRail = remote.fetchRail(railId)
             val category = Category(
                 id = fetchedRail.id,
@@ -303,6 +283,7 @@ class CmsCatalogRepository(
                 contentType = fetchedRail.rawContentType,
                 hasBackgroundImage = fetchedRail.hasBackgroundImage,
                 backgroundImageUrl = fetchedRail.backgroundImageUrl,
+                backgroundImageAspectRatio = fetchedRail.backgroundImageAspectRatio,
                 deviceTypes = fetchedRail.deviceTypes,
             )
             runCatching {
@@ -326,6 +307,86 @@ class CmsCatalogRepository(
             }
         }
     }
+
+    /**
+     * Persist menu and drop layouts/rails CMS no longer returns.
+     * Does not touch in-memory caches (caller may already hold [mutex]).
+     */
+    private suspend fun syncMenuToLocal(fetched: List<AppMenuItem>): PrunedCatalogIds {
+        val store = local ?: return PrunedCatalogIds()
+        val previousLayoutIds = collectLayoutIds(store.getMenuItems())
+        val nextLayoutIds = collectLayoutIds(fetched)
+        store.replaceMenuItems(fetched)
+
+        val removedLayoutIds = LinkedHashSet<String>()
+        val removedRailIds = LinkedHashSet<String>()
+
+        suspend fun purgeLayout(layoutId: String) {
+            val layout = store.getLayout(layoutId)
+            layout?.railIds?.forEach { railId ->
+                store.deleteCategoryAndChannels(railId)
+                removedRailIds += railId
+            }
+            store.deleteLayout(layoutId)
+            removedLayoutIds += layoutId
+        }
+
+        for (layoutId in previousLayoutIds - nextLayoutIds) {
+            purgeLayout(layoutId)
+        }
+        // Drop layout rows that were never tied to the current menu.
+        for (layoutId in store.getAllLayoutIds() - nextLayoutIds) {
+            purgeLayout(layoutId)
+        }
+
+        return PrunedCatalogIds(layoutIds = removedLayoutIds, railIds = removedRailIds)
+    }
+
+    /**
+     * Persist layout and drop rails removed from this layout since the last sync.
+     * Does not touch in-memory caches (caller clears [shelfCache] from the result).
+     */
+    private suspend fun syncLayoutToLocal(fetched: CmsLayout): PrunedCatalogIds {
+        val store = local ?: return PrunedCatalogIds()
+        val previous = store.getLayout(fetched.id)
+        store.saveLayout(
+            CachedLayout(
+                id = fetched.id,
+                name = fetched.name,
+                themeUrl = fetched.themeUrl,
+                railIds = fetched.railIds,
+                updatedAtMs = nowMs(),
+            ),
+        )
+        val removedRails = previous?.railIds.orEmpty().toSet() - fetched.railIds.toSet()
+        val deletedRails = LinkedHashSet<String>()
+        for (railId in removedRails) {
+            // Keep the rail if another retained layout still references it.
+            val stillReferenced = store.getAllLayoutIds().any { layoutId ->
+                store.getLayout(layoutId)?.railIds?.contains(railId) == true
+            }
+            if (!stillReferenced) {
+                store.deleteCategoryAndChannels(railId)
+                deletedRails += railId
+            }
+        }
+        return PrunedCatalogIds(railIds = deletedRails)
+    }
+
+    private fun collectLayoutIds(items: List<AppMenuItem>): Set<String> {
+        val ids = LinkedHashSet<String>()
+        fun walk(item: AppMenuItem) {
+            item.layoutId?.takeIf { it.isNotBlank() }?.let { ids += it }
+            item.children.forEach(::walk)
+        }
+        items.forEach(::walk)
+        return ids
+    }
+
+    private data class PrunedCatalogIds(
+        val layoutIds: Set<String> = emptySet(),
+        val railIds: Set<String> = emptySet(),
+    )
 
     /**
      * Discovery-dock nested payloads often omit assets for linked subrails.
@@ -367,6 +428,7 @@ class CmsCatalogRepository(
             rawContentType = rawContent,
             hasBackgroundImage = dbCategory?.hasBackgroundImage == true,
             backgroundImageUrl = dbCategory?.backgroundImageUrl,
+            backgroundImageAspectRatio = dbCategory?.backgroundImageAspectRatio,
             deviceTypes = dbCategory?.deviceTypes.orEmpty(),
         )
     }
@@ -398,11 +460,6 @@ class CmsCatalogRepository(
         return heroes to contentShelves
     }
 
-    private fun isFresh(updatedAtMs: Long?): Boolean {
-        if (updatedAtMs == null) return false
-        return (nowMs() - updatedAtMs) in 0 until cacheTtlMs
-    }
-
     private suspend fun <T> runCatchingResult(block: suspend () -> T): OttResult<T> =
         try {
             OttResult.Success(block())
@@ -415,6 +472,7 @@ class CmsCatalogRepository(
         const val TAG = "CmsCatalogRepository"
         const val HERO_COUNT = 6
         const val DEFAULT_RAIL_FETCH_LIMIT = 40
+        /** Retained for call-site compatibility; DB is offline-only (no TTL read-through). */
         const val DEFAULT_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
     }
 }

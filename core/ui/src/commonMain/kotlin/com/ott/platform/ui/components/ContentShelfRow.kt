@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -197,11 +198,16 @@ private fun ThematicShelfBody(
         ShelfCardStyle.Banner -> if (isTv) OttDimens.TvBannerCardHeight else OttDimens.BannerCardHeight
         ShelfCardStyle.Landscape -> if (isTv) OttDimens.TvCardHeight else OttDimens.CardHeight
     }
-    // Fixed panel height > card+metadata so the row can be truly vertically centered.
     // focusInset matches ChannelCard focusHalo so the rail never clips the ring.
     val verticalInset = if (isTv) 32.dp else 20.dp
     val focusInset = if (isTv) 16.dp else 12.dp
-    val railHeight = cardHeight + OttDimens.CardTitleHeight + verticalInset * 2 + focusInset * 2
+    // Cards + metadata need at least this much vertical room inside the panel.
+    val cardsBlockHeight = cardHeight + OttDimens.CardTitleHeight + verticalInset * 2
+    // CMS Rail_Background_Image is a wide banner (e.g. 1840×346). Prefer that aspect so
+    // Fit never crops brand art (football / crest); grow taller if cards need more room.
+    val bgAspect = shelf.backgroundImageAspectRatio
+        ?.takeIf { it > 0.1f }
+        ?: OttDimens.ThematicRailDefaultAspect
 
     if (showTitle) {
         ShelfTitle(
@@ -217,74 +223,93 @@ private fun ThematicShelfBody(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = horizontal)
-            .height(railHeight)
             .graphicsLayer { clip = false }
             .focusGroup()
             .focusRestorer()
             .testTag("thematic_container_${shelf.id}"),
     ) {
+        val panelWidth = maxWidth
+        val bgFittedHeight = panelWidth / bgAspect
+        val panelInnerHeight = maxOf(cardsBlockHeight, bgFittedHeight)
+        val railHeight = panelInnerHeight + focusInset * 2
+
         // 40% of the full rail width reserved for CMS brand / logo artwork.
-        val logoGutter = maxWidth * OttDimens.ThematicCardStartFraction
+        val logoGutter = panelWidth * OttDimens.ThematicCardStartFraction
         val cardStartGap = if (isTv) 16.dp else 10.dp
 
-        // Background panel only — clip the artwork, not the focus highlights on cards.
         Box(
             modifier = Modifier
-                .matchParentSize()
-                .padding(vertical = focusInset)
-                .clip(containerShape)
-                .background(Color(0xFF0B2748).copy(alpha = 0.92f)),
+                .fillMaxWidth()
+                .height(railHeight)
+                .graphicsLayer { clip = false },
         ) {
-            if (!shelf.backgroundImageUrl.isNullOrBlank()) {
-                RemoteImage(
-                    url = shelf.backgroundImageUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.CenterStart,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            // Keep left brand zone clear; darken only from the card start (~40%) onward.
+            // Background panel — blue chrome fills the rail; banner art is aspect-fit and
+            // vertically centered so football / crest never crop when cards make the rail taller.
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colorStops = arrayOf(
-                                0.0f to Color.Transparent,
-                                OttDimens.ThematicCardStartFraction to Color.Transparent,
-                                0.52f to Color(0x18081C36),
-                                0.70f to Color(0x44050F1E),
-                                1.0f to Color(0x77050F1E),
+                    .matchParentSize()
+                    .padding(vertical = focusInset)
+                    .clip(containerShape)
+                    .background(Color(0xFF0B2748).copy(alpha = 0.92f)),
+            ) {
+                if (!shelf.backgroundImageUrl.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxWidth()
+                            .aspectRatio(bgAspect),
+                    ) {
+                        RemoteImage(
+                            url = shelf.backgroundImageUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            alignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+                // Keep left brand zone clear; darken only from the card start (~40%) onward.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colorStops = arrayOf(
+                                    0.0f to Color.Transparent,
+                                    OttDimens.ThematicCardStartFraction to Color.Transparent,
+                                    0.52f to Color(0x18081C36),
+                                    0.70f to Color(0x44050F1E),
+                                    1.0f to Color(0x77050F1E),
+                                ),
                             ),
                         ),
-                    ),
-            )
-        }
+                )
+            }
 
-        // Card + title/year block centered vertically; no clip so focus ring stays visible.
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .fillMaxWidth()
-                .padding(start = logoGutter)
-                .graphicsLayer { clip = false },
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            ShelfItemsRow(
-                shelf = shelf,
-                onChannelActivate = onChannelActivate,
-                isTv = isTv,
-                listState = listState,
-                contentPadding = PaddingValues(
-                    start = cardStartGap,
-                    end = innerPad + if (isTv) 12.dp else 8.dp,
-                    top = focusInset,
-                    bottom = focusInset,
-                ),
-                fillWidth = true,
-                firstItemFocusRequester = firstCardFocus,
-            )
+            // Card + title/year block centered vertically; no clip so focus ring stays visible.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .padding(start = logoGutter)
+                    .graphicsLayer { clip = false },
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                ShelfItemsRow(
+                    shelf = shelf,
+                    onChannelActivate = onChannelActivate,
+                    isTv = isTv,
+                    listState = listState,
+                    contentPadding = PaddingValues(
+                        start = cardStartGap,
+                        end = innerPad + if (isTv) 12.dp else 8.dp,
+                        top = focusInset,
+                        bottom = focusInset,
+                    ),
+                    fillWidth = true,
+                    firstItemFocusRequester = firstCardFocus,
+                )
+            }
         }
     }
 }

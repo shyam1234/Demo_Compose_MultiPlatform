@@ -62,6 +62,11 @@ object OttDimens {
      * so CMS `rail_background_image` logo + season title stay fully visible.
      */
     const val ThematicCardStartFraction = 0.40f
+    /**
+     * CMS `Rail_Background_Image` assets are wide banners (e.g. Premier League 1840×346).
+     * Used when the rail does not carry explicit image width/height.
+     */
+    const val ThematicRailDefaultAspect = 1840f / 346f
     val ThematicRailCorner = 20.dp
     val PhoneThematicRailCorner = 16.dp
     val ThematicRailInnerPadding = 22.dp

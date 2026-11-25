@@ -21,6 +21,7 @@ internal val localDbJson = Json {
 internal data class StoredCategoryRailMeta(
     val hasBackgroundImage: Boolean = false,
     val backgroundImageUrl: String? = null,
+    val backgroundImageAspectRatio: Float? = null,
     val deviceTypes: List<String> = emptyList(),
     val note: String = "",
 )
@@ -28,11 +29,13 @@ internal data class StoredCategoryRailMeta(
 internal fun encodeCategoryDescription(
     hasBackgroundImage: Boolean,
     backgroundImageUrl: String?,
+    backgroundImageAspectRatio: Float? = null,
     deviceTypes: List<String> = emptyList(),
     note: String = "",
 ): String {
     if (!hasBackgroundImage &&
         backgroundImageUrl.isNullOrBlank() &&
+        backgroundImageAspectRatio == null &&
         deviceTypes.isEmpty() &&
         note.isBlank()
     ) {
@@ -42,6 +45,7 @@ internal fun encodeCategoryDescription(
         StoredCategoryRailMeta(
             hasBackgroundImage = hasBackgroundImage,
             backgroundImageUrl = backgroundImageUrl,
+            backgroundImageAspectRatio = backgroundImageAspectRatio,
             deviceTypes = deviceTypes,
             note = note,
         ),

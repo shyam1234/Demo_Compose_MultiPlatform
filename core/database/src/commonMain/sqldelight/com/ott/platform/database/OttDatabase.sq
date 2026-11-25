@@ -91,6 +91,14 @@ upsertLayout:
 INSERT OR REPLACE INTO cms_layout(id, name, theme_url, rail_ids_json, updated_at_ms)
 VALUES (?, ?, ?, ?, ?);
 
+selectAllLayoutIds:
+SELECT id
+FROM cms_layout;
+
+deleteLayoutById:
+DELETE FROM cms_layout
+WHERE id = ?;
+
 -- Categories / Rails metadata queries
 selectAllCategories:
 SELECT id, name, description, rail_display_type, rail_content_type, sort_order, updated_at_ms
@@ -113,6 +121,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?);
 
 deleteAllCategories:
 DELETE FROM categories;
+
+deleteCategoryById:
+DELETE FROM categories
+WHERE id = ?;
 
 -- Channels / Assets queries
 selectChannelsByCategory:
