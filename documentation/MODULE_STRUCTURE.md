@@ -15,7 +15,7 @@ OttPlatform/
 ├── core/
 │   ├── domain/              # Entities, use cases, repository interfaces
 │   ├── database/            # SQLDelight schema, local data sources & platform drivers
-│   ├── data/                # Repository impls, mappers, offline cache & watchlist
+│   ├── data/                # Repository impls, mappers, network-first catalog sync & watchlist
 │   ├── network/             # Ktor client setup (demo-ready)
 │   ├── designsystem/        # Theme, typography, TV/mobile tokens
 │   ├── ui/                  # Shared composables (cards, rows, hero)
@@ -68,7 +68,7 @@ OttPlatform/
 |--------|----------------|----------|
 | `core/domain` | Entities, use cases, repo interfaces | No |
 | `core/database` | SQLDelight `OttDatabase`, local data sources, Android/iOS/Desktop drivers | No |
-| `core/data` | Repo implementations, offline catalog cache, persistent watchlist | No |
+| `core/data` | Repo implementations, network-first catalog sync (prune + offline fallback), persistent watchlist | No |
 | `core/network` | Ktor HttpClient factory | No |
 | `core/player-api` | `PlayerEngine`, `PlayerState`, track contracts | No |
 | `core/designsystem` | Colors, type, spacing, TV tokens | Yes |

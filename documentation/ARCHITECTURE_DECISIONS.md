@@ -132,16 +132,21 @@
 
 ## ADR-010: SQLDelight common database for offline catalog & watchlist
 
-**Status:** Accepted  
+**Status:** Accepted (updated)  
 
-**Context:** Users need persistent watchlist state and offline browsing of the previously fetched catalog when network connectivity is unavailable across Android, iOS, and Desktop.  
+**Context:** Users need persistent watchlist state and offline browsing of the previously fetched catalog when network connectivity is unavailable across Android, iOS, and Desktop. Stale CMS rows (removed menus / layouts / rails / assets) must not linger after a successful online refresh.  
 
-**Decision:** Introduce `:core:database` using **SQLDelight 2.4.1** (`ott_platform.db`) with shared schema/queries/data sources in `commonMain` and platform SQLite drivers (`AndroidSqliteDriver`, `NativeSqliteDriver`, `JdbcSqliteDriver`). Bind `PersistentWatchlistRepository` and wire `CatalogLocalDataSource` into the catalog repository (6-hour freshness TTL + offline fallback on network failure). Use `kotlin.time.Clock.System` in common code for Kotlin/Native compatibility.  
+**Decision:** Introduce `:core:database` using **SQLDelight 2.4.1** (`ott_platform.db`) with shared schema/queries/data sources in `commonMain` and platform SQLite drivers (`AndroidSqliteDriver`, `NativeSqliteDriver`, `JdbcSqliteDriver`). Bind `PersistentWatchlistRepository` and wire `CatalogLocalDataSource` into `CmsCatalogRepository` with a **network-first** policy:
+- Online → always fetch Play-CMS; on success **replace** local menu / layout / per-rail channels and **prune** layouts & rails CMS no longer returns (`deleteLayout`, `deleteCategoryAndChannels`).
+- Offline / network failure → serve the last synced local snapshot (menu, layout, rails, search).
+- Web mirrors the same contracts via `localStorage` (`ott_web_cms_*_v7`).
+- Use `kotlin.time.Clock.System` in common code for Kotlin/Native compatibility.
 
 **Consequences:**
 - Single shared SQLite schema and reactive `Flow` watchlist across Android, Android TV, iOS, and Desktop.
 - Requires `-lsqlite3` linker flag for the static `OttShared` iOS framework.
-- Schema migrations (`1.sqm`, `2.sqm`) upgrade existing installations cleanly without leaving stale rows.
+- Schema migrations (`1.sqm`, `2.sqm`) upgrade existing installations cleanly; sync pruning removes orphan catalog rows without a schema bump.
+- Local DB is no longer a TTL “prefer cache” layer — it is strictly an offline mirror of the last successful API response.
 
 ---
 
@@ -152,12 +157,14 @@
 **Context:** Replaced static `iptv-org` M3U/category feeds with **Play-CMS** (`https://cms.play-cms.com`), where navigation tabs (`menuL1`/`menuL2`), screen layouts (`theme_url`, `sortrail`), rail presentation (`rail_display_type`, `rail_content_type`), and artwork `imagetype` values are server-driven and may introduce new types in the future.
 
 **Decision:**
-- Implement `CmsAuthManager` (internal login + `Mutex` single-flight caching) and `CmsCatalogRemoteDataSource` (automatic `401` token refresh + retry once) in `:core:data`, backed by SQLDelight v3 (`cms_menu`, `cms_layout`, `categories`, composite-key `channels(category_id, id)`) and Web `localStorage` (`_v2`).
+- Implement `CmsAuthManager` (internal login + `Mutex` single-flight caching) and `CmsCatalogRemoteDataSource` (automatic `401` token refresh + retry once) in `:core:data`, backed by SQLDelight v3 (`cms_menu`, `cms_layout`, `categories`, composite-key `channels(category_id, id)`) and Web `localStorage` (`ott_web_cms_*_v7`).
 - Store all asset `MediaImage` entries in `Channel.images` and resolve artwork dynamically through `ImageSlot.forRail(displayType, contentType)` + `ShelfCardStyle.fromCms()`, matching future CMS `imagetype` values case-insensitively with orientation-based fallbacks.
 - Drive top/bottom navigation dynamically from `AppMenuViewModel` (`OttRoutes.HOME` + `OttRoutes.LAYOUT`) and render `menuL2` sub-menus inline on `HomeScreen`.
 
 **Consequences:**
-- New CMS menu tabs, layouts, rail styles (`Portrait`, `Landscape`, `Square`, `Banner`, `Top10`, `Grid`, `Mosaic`, `Editorial`), and future `imagetype` artwork work without rewriting repository or parser code.
+- New CMS menu tabs, layouts, rail styles (`Portrait`, `Landscape`, `Square`, `Banner`, `Top10`, `Grid`, `Mosaic`, `Editorial`, `discovery_dock`, thematic `rail_background_image`), and future `imagetype` artwork work without rewriting repository or parser code.
+- Thematic rails (`ContentShelfRow.ThematicShelfBody`) size the branded panel from CMS `Rail_Background_Image` aspect (`imagewidth`/`imageheight`, default `1840/346`) and render with `ContentScale.Fit` vertically centered so brand artwork (e.g. football / crest) is not cropped by the card overlay.
+- Discovery-dock child tabs are filtered by CMS `devicetype` for the active platform (iPhone → `iosmobile`); tabs missing that allow-list will not appear on that device.
 - See [API.md](API.md) for full API contracts and team ownership roles.
 
 ---

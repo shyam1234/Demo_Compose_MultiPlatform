@@ -20,7 +20,7 @@ sequenceDiagram
     API-->>Auth: { access, refresh }
     App->>API: GET /v1/menu?devicetype=androidTV&lang_code=en (Bearer)
     API-->>App: menuGroup -> menuL1[] -> layoutId
-    App->>DB: Cache dynamic menu (6h TTL)
+    App->>DB: Replace menu blob; prune layouts/rails removed from CMS
     App->>API: GET /v1/layouts/{layoutId} (Bearer)
     API-->>App: theme_url + sortrail[]
     par Concurrent Rail Hydration
@@ -28,8 +28,9 @@ sequenceDiagram
         App->>API: GET /v2/rails?id={railId_N}
     end
     API-->>App: rail_display_type, rail_content_type, existing_asset[]
-    App->>DB: Persist layout, rail metadata, and assets
+    App->>DB: Upsert layout/rails; delete rails dropped from layout; replace channel rows per rail
     App-->>App: Render dynamic tabs, Hero, and Rail shelves
+    Note over App,DB: Local DB / localStorage is offline-only — online always refreshes from API
 ```
 
 If any authenticated `GET` receives **`401 Unauthorized`**, `CmsCatalogRemoteDataSource` automatically invalidates the cached token, invokes `CmsAuthManager.getAccessToken(forceRefresh = true)`, and retries the request once transparently.
@@ -83,7 +84,7 @@ If any authenticated `GET` receives **`401 Unauthorized`**, `CmsCatalogRemoteDat
   - `_id`, `name`, `layout_type`
   - `theme.theme_url`: optional atmospheric backdrop URL rendered softly behind the top of the page.
   - `sortrail` (primary) / `rail_id` (fallback): ordered list of rail IDs to render vertically.
-- **App Behavior:** `CmsCatalogRepository.getLayoutFeed(layoutId)` caches the layout structure in `cms_layout` and resolves all rails concurrently in `sortrail` order.
+- **App Behavior:** `CmsCatalogRepository.getLayoutFeed(layoutId)` always fetches the layout from the network when online, persists it in `cms_layout`, drops rails that were removed from that layout’s `sortrail`, and resolves remaining rails concurrently.
 
 ---
 
@@ -94,7 +95,9 @@ If any authenticated `GET` receives **`401 Unauthorized`**, `CmsCatalogRemoteDat
 - **Key Rail Fields:**
   - `_id`, `name`
   - `rail_display_type`: e.g. `"Landscape"`, `"Portrait"`, or future types like `"Square"`, `"Banner"`.
-  - `rail_content_type`: e.g. `"new"`, `"generic"`, `"top_10"`, `"mosaic"`, `"grid"`, `"editorial"`.
+  - `rail_content_type`: e.g. `"new"`, `"generic"`, `"top_10"`, `"mosaic"`, `"grid"`, `"editorial"`, `"discovery_dock"`, `"hero"`.
+  - `rail_background_image` (bool) + `rail_images[]` with `imagetype = "Rail_Background_Image"`: enables **thematic / branded** rail chrome (`ContentShelfRow.ThematicShelfBody`). CMS `imagewidth` / `imageheight` (e.g. Premier League `1840×346`) drive panel aspect so banner art is `ContentScale.Fit` and vertically centered without cropping brand artwork.
+  - `discovery_dock_rail_ids` / `discovery_dock_rail_response[]`: nested tab rails for discovery docks (each child is filtered by CMS `devicetype` for the current platform — e.g. iPhone `iosmobile`).
   - `rail_type`: `"Manual Multi Category"`, `"Multi Filter"`, etc.
   - `existing_asset.existing_asset[]`: list of assets in the rail.
 - **Key Asset Fields & Quirks Handled:**
@@ -127,11 +130,15 @@ Instead of hardcoding two image fields (`posterUrl` / `thumbnailUrl`), every ass
 - **Native (Android, Android TV, iOS, Desktop):** SQLDelight schema v3 (`OttDatabase.sq` + `1.sqm` + `2.sqm`) stores:
   - `cms_menu` (serialized `AppMenuItem` list + timestamp)
   - `cms_layout` (layout ID, name, `theme_url`, ordered `rail_ids_json`)
-  - `categories` (rail ID, title, `rail_display_type`, `rail_content_type`)
+  - `categories` (rail ID, title, `rail_display_type`, `rail_content_type`, thematic meta in `description` JSON including `backgroundImageUrl` / `backgroundImageAspectRatio`)
   - `channels` (composite primary key `(category_id, id)` so assets appearing in multiple rails are preserved per rail without overwriting, plus `metadata_json` for images/genres/synopsis/cast)
   - `watchlist` (user-saved assets with full `metadata_json`)
-- **Web (`wasmJs`):** `WebCatalogLocalDataSource` and `WebWatchlistLocalDataSource` mirror the same contracts using browser `localStorage` (`ott_web_cms_*_v2`).
-- **TTL & Fallback:** 6-hour freshness window; when offline or when a remote call fails, cached menu, layout, rails, and search results are served automatically.
+- **Web (`wasmJs`):** `WebCatalogLocalDataSource` and `WebWatchlistLocalDataSource` mirror the same contracts using browser `localStorage` (`ott_web_cms_*_v7`).
+- **Online sync policy (network-first):** When the device is online, `CmsCatalogRepository` always refreshes menu / layout / rails from Play-CMS. Successful responses **replace** local rows and **prune** data CMS no longer returns:
+  - Menu refresh → delete layouts (and their rails/channels) not referenced by the new menu
+  - Layout refresh → delete rails removed from that layout’s `sortrail` (unless still referenced by another retained layout)
+  - Rail refresh → `replaceChannelsForCategory` (delete-all for that rail, then insert current assets)
+- **Offline-only reads:** Local SQLDelight / `localStorage` is used **only** when the network call fails or returns empty; there is no TTL-based “serve fresh DB instead of API” path anymore.
 
 ---
 
@@ -141,7 +148,7 @@ Instead of hardcoding two image fields (`posterUrl` / `thumbnailUrl`), every ass
 |----------|--------------------------|---------------------------|
 | **CMS / Content Operations** | Configure `menuL1`/`menuL2` groups, publish layouts (`sortrail`, `theme_url`), curate rails (`rail_display_type`, `rail_content_type`), upload artwork (`Portrait`, `Landscape`, `tile_artwork`, `Logo`, future types), and attach `playback_urls`. | Play-CMS Admin Console (`cms.play-cms.com`) |
 | **Backend / API Platform Engineer** | Maintain `/v1/login`, `/v1/menu`, `/v1/layouts/{id}`, `/v2/rails` endpoints, JWT expiry/refresh contracts, CORS headers (`Access-Control-Allow-Origin`), and CDN image resizing (`/v1/imageresize`). | Play-CMS Backend Services |
-| **KMP / Core Data Engineer** | Own `CmsAuthManager` (token lifecycle + 401 retry), `CmsDtos` (polymorphic JSON resilience), `CmsCatalogMapper`, `CmsCatalogRepository` (TTL + offline fallback), and SQLDelight migrations (`OttDatabase.sq`, `.sqm`). | `core/domain`, `core/data`, `core/database`, `core/network`, `core/di` |
-| **CMP / UI Engineer** | Build and maintain dynamic `OttTopMenu`/`OttBottomMenu`, `HeroBannerCarousel`, `ContentShelfRow` (`Top10`, `Grid`, `Editorial`, `Portrait`, `Landscape`, `Square`, `Banner`), `ChannelCard`, `DetailsScreen`, `SearchScreen`, and TV D-pad focus UX. | `core/designsystem`, `core/ui`, `core/navigation`, `features/*`, `apps/shared` |
+| **KMP / Core Data Engineer** | Own `CmsAuthManager` (token lifecycle + 401 retry), `CmsDtos` (polymorphic JSON resilience), `CmsCatalogMapper`, `CmsCatalogRepository` (network-first sync + prune + offline fallback), and SQLDelight migrations (`OttDatabase.sq`, `.sqm`). | `core/domain`, `core/data`, `core/database`, `core/network`, `core/di` |
+| **CMP / UI Engineer** | Build and maintain dynamic `OttTopMenu`/`OttBottomMenu`, `HeroBannerCarousel`, `ContentShelfRow` (`Top10`, `Grid`, `Editorial`, `Portrait`, `Landscape`, `Square`, `Banner`, thematic / discovery-dock), `ChannelCard`, `DetailsScreen`, `SearchScreen`, and TV D-pad focus UX. | `core/designsystem`, `core/ui`, `core/navigation`, `features/*`, `apps/shared` |
 | **Native Player / Platform Engineer** | Implement and tune `PlayerEngine` bindings (Media3 ExoPlayer on Android/TV, AVPlayer on iOS/macOS/tvOS, HTML5 `<video>` + `hls.js` on Web) and handle unplayable/coming-soon states cleanly. | `core/player-api`, `platform/android`, `platform/ios`, `platform/web`, `platform/tvos` |
 | **QA / Release Engineer** | Maintain `commonTest` / `desktopTest` / `testDebugUnitTest` coverage, verify live CMS hydration + offline fallback on physical devices (iPhone, Android Phone/Tablet, Android TV, Web), and validate release artifacts. | `core/testing`, `*Test.kt`, `.github/workflows/deploy-web.yml` |

@@ -84,7 +84,7 @@ flowchart LR
 
     subgraph Data["Data"]
         RepoImpl["Repository impls"]
-        LocalDb["SQLDelight offline DB"]
+        LocalDb["SQLDelight offline mirror<br/>(network-first + prune)"]
         Mappers["DTO ↔ Domain mappers"]
         Network["Ktor network"]
     end

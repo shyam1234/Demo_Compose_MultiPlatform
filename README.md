@@ -79,7 +79,7 @@ flowchart TB
 
 - Kotlin **2.4.21** · Compose Multiplatform **1.11.1** (AGP 8.10 / compileSdk 36)
 - Coroutines · Serialization · Ktor · Koin
-- **SQLDelight 2.4.1** (`:core:database` — Android, iOS, Desktop SQLite drivers) + `localStorage` persistence on Web (`wasmJs`) for offline catalog caching & persistent watchlist
+- **SQLDelight 2.4.1** (`:core:database` — Android, iOS, Desktop SQLite drivers) + `localStorage` persistence on Web (`wasmJs`) for **offline-only** catalog mirroring (network-first sync + prune of removed CMS rows) & persistent watchlist
 - Media3 ExoPlayer (Android) · AVPlayer (iOS) · HTML5 `<video>` + `hls.js` (`platform/web`) · FakePlayerEngine (desktop/tests)
 - **Play-CMS** (`https://cms.play-cms.com`) dynamic auth, menus, layouts, rails, and rich artwork
 
@@ -114,11 +114,11 @@ export JAVA_HOME=/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ./gradlew testDebugUnitTest desktopTest --console=plain
 ```
 
-**Passed on this machine:** 23 suites / **46 tests passed** (0 failures, 0 errors, 0 skipped) — covering `CmsCatalogMapper`, `CmsCatalogRepository` (login, `401` refresh, layout switching, offline fallback), `ImageResolver`, `GetMenuUseCase`, `GetLayoutFeedUseCase`, `SearchChannelsUseCase`, SQLDelight catalog/menu/layout/watchlist persistence, `AppMenuViewModel`, `HomeViewModel`, `PlayerViewModel`, and `PlayerController`.
+**Passed on this machine:** 23 suites / **46 tests passed** (0 failures, 0 errors, 0 skipped) — covering `CmsCatalogMapper` (incl. thematic `Rail_Background_Image` aspect), `CmsCatalogRepository` (login, `401` refresh, layout switching, network-first prune, offline fallback), `ImageResolver`, `GetMenuUseCase`, `GetLayoutFeedUseCase`, `SearchChannelsUseCase`, SQLDelight catalog/menu/layout/watchlist persistence, `AppMenuViewModel`, `HomeViewModel`, `PlayerViewModel`, and `PlayerController`.
 
 ## Status
 
-Android phone/tablet/TV + Desktop + **Web (`wasmJs`)** + **iOS device** (CMP + AVPlayer + SQLDelight v3 offline cache) are verified against the live Play-CMS backend (`7` rails, `33` assets across dynamic menus and layouts, cached offline in `ott_platform.db` on native and `localStorage` on Web). Apple TV remains SwiftUI + shared KMP (not CMP UI).
+Android phone/tablet/TV + Desktop + **Web (`wasmJs`)** + **iOS device** (CMP + AVPlayer + SQLDelight v3 offline mirror) are verified against the live Play-CMS backend (`7` rails, `33` assets across dynamic menus and layouts; local DB / `localStorage` used only when offline). Thematic branded rails and discovery-dock tabs are CMS-driven. Apple TV remains SwiftUI + shared KMP (not CMP UI).
 
 ## Official references
 

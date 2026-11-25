@@ -90,7 +90,7 @@ The repo should include sample tests for at least:
 Also verified on physical devices & Web (`2026-11-20`):
 - **iPhone 13 (`com.ott.platform.ios`)**: Built, installed, and launched via Xcode/devicectl; verified SQLDelight v3 (`ott_platform.db`) synced and cached `1` dynamic menu, `1` layout, and all `7` Play-CMS rails (`33` assets across `Landscape`, `Portrait`, `new`, `top_10`, `mosaic`, `grid`, `editorial`).
 - **Samsung Galaxy Tab (`SM_P613`, `com.ott.platform.android`)**: Installed via `:apps:androidApp:installDebug` and launched; verified SQLDelight v3 (`ott_platform.db`) synced and cached Play-CMS menu, layout, and rails.
-- **Web (`wasmJs`, `apps/webApp`)**: Production Wasm bundle (`:apps:webApp:wasmJsBrowserDistribution`) tested against Play-CMS (CORS enabled) and `localStorage` (`ott_web_cms_*_v2`).
+- **Web (`wasmJs`, `apps/webApp`)**: Production Wasm bundle (`:apps:webApp:wasmJsBrowserDistribution`) tested against Play-CMS (CORS enabled) and `localStorage` (`ott_web_cms_*_v7`) as an offline-only catalog mirror (network-first sync + prune).
 
 ## Test architecture diagram
 
